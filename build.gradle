@@ -1,0 +1,64 @@
+plugins {
+    id 'org.springframework.boot' version '3.3.5'
+    id 'io.spring.dependency-management' version '1.1.6'
+    id 'java'
+}
+
+group = 'io.github.lib0823'
+version = '1.1.0'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation platform('io.zonky.test.postgres:embedded-postgres-binaries-bom:16.4.0')
+    implementation 'org.springframework.boot:spring-boot-starter'
+    implementation 'org.springframework.boot:spring-boot-starter-json'
+    implementation 'org.springframework.boot:spring-boot-starter-web'   // 로컬 관리 페이지(localhost 전용)
+    implementation 'me.paulschwarz:spring-dotenv:4.0.0'
+
+    // --- M2 (수집/DB) ---
+    implementation 'org.mybatis.spring.boot:mybatis-spring-boot-starter:3.0.3'
+    runtimeOnly 'org.postgresql:postgresql'
+    // 내장 DB(DB_URL 을 비우면 사용): 실제 PostgreSQL 바이너리를 자식 프로세스로 띄운다 — Docker 없이 실행 파일 하나로 돌리기 위함.
+    implementation('io.zonky.test:embedded-postgres:2.0.7') {
+        exclude group: 'io.zonky.test.postgres', module: 'embedded-postgres-binaries-linux-amd64-alpine'
+    }
+    runtimeOnly 'io.zonky.test.postgres:embedded-postgres-binaries-darwin-arm64v8'
+
+    // --- M3 (요약/LLM) ---
+    // LLM 호출은 Claude Code CLI(headless)를 통해 수행 (Enterprise 구독 사용, 별도 API 키 불필요).
+    // 추후 정식 API 키 / Bedrock / Vertex 접근을 받으면 com.anthropic:anthropic-java 로 교체 가능.
+
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+}
+
+tasks.named('bootJar') {
+    archiveFileName = 'dev-agent.jar'
+}
+
+// 버전 정보(META-INF/build-info.properties) — 화면·/api/system/status 에 표시
+springBoot {
+    buildInfo()
+}
+
+// 빈 DB 초기화용 스키마를 jar 에 함께 넣는다(boot/Bootstrap.initSchema)
+tasks.named('processResources') {
+    from('db') {
+        include 'schema.sql'
+        into 'db'
+    }
+}
+
+apply from: 'gradle/dist.gradle'
+
+tasks.named('test') {
+    useJUnitPlatform()
+}

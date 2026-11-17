@@ -1,0 +1,37 @@
+# secrets / local
+.env
+*.env
+pgdata/
+
+# build
+build/
+.gradle/
+out/
+target/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# logs / scratch
+*.log
+logs/
+scratch/
+
+# runtime flags
+bot-stop.flag
+bot.lock
+
+# gitlab issue agent: cloned repositories
+work/
+
+# preview runtime (jdk/maven/tomcat) installed by scripts/setup-preview.ps1
+tools/
+
+# running copy of the jar (run.cmd copies build/libs here so gradle builds do not touch the live JVM)
+run/
+
+# embedded PostgreSQL (DB_URL empty): data + extracted binaries
+pgdata-embedded/
+pg-bin/

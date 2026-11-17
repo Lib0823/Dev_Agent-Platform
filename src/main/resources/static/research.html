@@ -1,0 +1,642 @@
+<!doctype html>
+<html lang="ko" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>질의 · Dev Agent</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%278%27 fill=%27%236d5dfc%27/%3E%3Ccircle cx=%2714%27 cy=%2714%27 r=%276%27 stroke=%27white%27 stroke-width=%272.6%27 fill=%27none%27/%3E%3Cpath d=%27M19 19l5 5%27 stroke=%27white%27 stroke-width=%272.8%27 stroke-linecap=%27round%27/%3E%3C/svg%3E">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<link rel="stylesheet" href="/ui.css">
+<style>
+  /* ---------- layout ---------- */
+  .body { display: grid; grid-template-columns: 360px minmax(0, 1fr); gap: 18px; padding: 18px 22px 48px; flex: 1; }
+  @media (max-width: 980px) { .body { grid-template-columns: 1fr; } .sidebar { position: static !important; max-height: none !important; } }
+  .sidebar { padding: 14px; position: sticky; top: 78px; max-height: calc(100vh - 96px); display: flex; flex-direction: column; gap: 12px; }
+
+  /* ---------- 새 질의 ---------- */
+  .ask { border: 1px solid var(--line); border-radius: 14px; padding: 12px; background: var(--surface2); display: flex; flex-direction: column; gap: 9px; }
+  .ask textarea { min-height: 86px; background: var(--bg2); }
+  .ask .lbl { font-size: 11.5px; font-weight: 600; color: var(--muted); letter-spacing: .04em; text-transform: uppercase; }
+  .pchips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .pchips .pc { height: 26px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--text2); font-size: 12px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+  .pchips .pc:hover { border-color: var(--line2); color: var(--text); }
+  .pchips .pc.sel { border-color: color-mix(in srgb, var(--accent) 55%, transparent); color: var(--text); background: color-mix(in srgb, var(--accent) 16%, var(--surface)); }
+  .pchips .pc .o { font-family: var(--mono); font-size: 10px; color: var(--accent); }
+  .brow { display: grid; grid-template-columns: 12px minmax(0, 62px) minmax(0, 1fr) 22px 22px; gap: 5px; align-items: center; margin-top: 6px; }
+  .brow .n { font-family: var(--mono); font-size: 10px; color: var(--accent); text-align: center; }
+  .brow .nm { font-size: 12px; font-weight: 600; color: var(--text2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .brow select.in { height: 30px; padding: 0 4px 0 8px; font-size: 12px; text-overflow: ellipsis; }
+  .brow .mini { height: 22px; width: 22px; border-radius: 7px; border: 1px solid var(--line); background: var(--surface); color: var(--text2); font-size: 13px; line-height: 1; }
+  .brow .mini:hover { color: var(--text); border-color: var(--line2); }
+  .ask .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .ask select.in { height: 34px; padding: 0 10px; font-size: 12.5px; }
+  .ask .foot { display: flex; align-items: center; gap: 8px; }
+  .ask .foot .hint { font-size: 11.5px; color: var(--muted); flex: 1; line-height: 1.4; }
+  .lim { padding: 8px 10px; border-radius: 10px; background: color-mix(in srgb, var(--warn) 14%, transparent); color: var(--warn); font-size: 12px; font-weight: 600; line-height: 1.4; }
+
+  /* ---------- 목록 ---------- */
+  .rform { display: none; flex-direction: column; gap: 8px; border-top: 1px dashed var(--line2); padding-top: 9px; }
+  .rform.open { display: flex; }
+  .rform .r { display: grid; grid-template-columns: 1fr 104px; gap: 8px; }
+  .rform input.in { height: 34px; font-size: 12.5px; }
+  .dchips { display: flex; gap: 4px; flex-wrap: wrap; }
+  .dchips .dc { width: 30px; height: 26px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--text2); font-size: 12px; font-weight: 600; cursor: pointer; }
+  .dchips .dc.sel { border-color: color-mix(in srgb, var(--accent) 55%, transparent); color: var(--text); background: color-mix(in srgb, var(--accent) 16%, var(--surface)); }
+  .rlist { display: flex; flex-direction: column; gap: 4px; max-height: 168px; overflow: auto; flex: none; }
+  .rlist:empty { display: none; }
+  .ritem { display: flex; align-items: center; gap: 8px; padding: 7px 8px 7px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface2); }
+  .ritem.off { opacity: .55; }
+  .ritem .ri { flex: 1; min-width: 0; cursor: pointer; }
+  .ritem .rn { font-size: 12.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ritem .rs { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ritem button { border: none; background: none; color: var(--muted); cursor: pointer; font-size: 13px; padding: 2px 4px; border-radius: 6px; }
+  .ritem button:hover { color: var(--text); background: var(--raised); }
+  .tlist { overflow: auto; flex: 1; display: flex; flex-direction: column; gap: 6px; padding-right: 2px; }
+  .titem { position: relative; padding: 10px 12px 10px 16px; border-radius: 12px; cursor: pointer; border: 1px solid transparent; transition: background .15s, border-color .15s; }
+  .titem::before { content: ""; position: absolute; left: 6px; top: 12px; bottom: 12px; width: 3px; border-radius: 3px; background: var(--muted); opacity: .5; }
+  .titem.st-run::before { background: var(--run); opacity: 1; animation: blink 1.2s infinite; } .titem.st-wait::before { background: var(--warn); opacity: 1; }
+  .titem.st-ok::before { background: var(--ok); opacity: .9; } .titem.st-err::before { background: var(--err); opacity: .9; }
+  .titem:hover { background: var(--surface2); }
+  .titem.sel { background: var(--surface2); border-color: var(--line2); box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent) inset; }
+  .titem .r1 { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .titem .pr { font-family: var(--mono); font-size: 11px; color: var(--text2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .titem .q { font-size: 13px; margin-top: 4px; color: var(--text); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.4; }
+  .titem .r3 { display: flex; gap: 10px; margin-top: 6px; font-size: 11.5px; color: var(--muted); }
+  .runmini { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: currentColor; margin-right: 6px; vertical-align: -1px; animation: rbounce 1.1s infinite; }
+  .m-fable { color: #8b5cf6; } .m-opus { color: #d97757; } .m-sonnet { color: #3b82f6; } .m-haiku { color: #10b981; }
+
+  /* ---------- main ---------- */
+  .content { padding: 22px 24px 26px; min-width: 0; }
+  .empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; min-height: 360px; color: var(--muted); text-align: center; }
+  .empty .art { width: 72px; height: 72px; border-radius: 20px; display: grid; place-items: center; background: var(--surface2); border: 1px solid var(--line); color: var(--text2); }
+  .empty h3 { margin: 6px 0 0; font-size: 15px; color: var(--text2); font-weight: 600; }
+  .empty p { margin: 0; font-size: 13px; max-width: 420px; line-height: 1.5; }
+  .hero .crumbs { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .proj { font-family: var(--mono); font-size: 12px; color: var(--text2); background: var(--surface2); border: 1px solid var(--line); border-radius: 7px; padding: 2px 8px; }
+  .hero h1 { font-size: 19px; line-height: 1.4; margin: 10px 0 12px; letter-spacing: -.02em; font-weight: 700; white-space: pre-wrap; }
+  .hero .stats { margin: 14px 0 6px; }
+  .runner { display: flex; align-items: center; gap: 14px; margin-top: 12px; padding: 10px 14px; border-radius: 12px; background: var(--surface2); border: 1px solid var(--line); }
+  .runner .av { position: relative; width: 44px; height: 48px; flex: none; }
+  .runner .av svg { width: 44px; height: 44px; display: block; animation: rbounce 1.1s cubic-bezier(.3,.7,.4,1) infinite; filter: drop-shadow(0 6px 8px rgba(0,0,0,.18)); transform-origin: 50% 100%; }
+  @keyframes rbounce { 0%,100% { transform: translateY(0) scale(1,1); } 35% { transform: translateY(-11px) scale(.95,1.06); } 50% { transform: translateY(-13px) scale(.97,1.03); } 72% { transform: translateY(0) scale(1.08,.92); } 85% { transform: translateY(-2px) scale(1,1); } }
+  .runner .nm { font-weight: 700; font-size: 15px; text-transform: capitalize; } .runner .nm small { font-weight: 500; color: var(--muted); text-transform: none; margin-left: 4px; }
+  .runner .sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .seg.tabs { margin: 16px 0 14px; }
+
+  /* ---------- 결과 스레드 ---------- */
+  .qa { margin-bottom: 22px; }
+  .qbox { display: flex; gap: 10px; align-items: flex-start; }
+  .qbox .who { flex: none; width: 28px; height: 28px; border-radius: 9px; background: var(--surface2); border: 1px solid var(--line); display: grid; place-items: center; font-size: 11px; font-weight: 800; color: var(--text2); }
+  .qbox .qt { flex: 1; min-width: 0; background: var(--surface2); border: 1px solid var(--line); border-radius: 12px 12px 12px 4px; padding: 10px 14px; white-space: pre-wrap; word-break: break-word; line-height: 1.55; font-size: 13.5px; }
+  .qbox .meta { font-size: 11.5px; color: var(--muted); margin-top: 4px; display: flex; gap: 10px; flex-wrap: wrap; }
+  .abox { margin: 10px 0 0 38px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); overflow: hidden; }
+  .abox .bar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--line); background: var(--surface2); font-size: 12px; color: var(--muted); }
+  .abox .bar .sp { flex: 1; }
+  .abox .doc { padding: 16px 20px 18px; }
+  .abox .wait { padding: 18px 20px; display: flex; align-items: center; gap: 12px; color: var(--text2); font-size: 13.5px; }
+  .abox .wait .dots i { display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: currentColor; margin-left: 3px; animation: rblink 1.2s infinite; }
+  .abox .wait .dots i:nth-child(2) { animation-delay: .2s; } .abox .wait .dots i:nth-child(3) { animation-delay: .4s; }
+  @keyframes rblink { 0%,80%,100% { opacity: .2; } 40% { opacity: 1; } }
+  .vrep { padding: 12px 20px 14px; border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--info) 7%, transparent); font-size: 13px; }
+  .vrep .vh { font-size: 11.5px; font-weight: 700; color: var(--muted); letter-spacing: .04em; margin-bottom: 6px; }
+  button.badge { font: inherit; font-size: 11.5px; font-weight: 600; }
+  .md h1 { font-size: 20px; margin: 4px 0 14px; letter-spacing: -.02em; }
+  .md h4 { font-size: 13.5px; margin: 12px 0 4px; color: var(--text2); }
+  .md table { border-collapse: collapse; width: 100%; margin: 8px 0 14px; font-size: 13px; display: block; overflow-x: auto; }
+  .md th, .md td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; vertical-align: top; line-height: 1.5; }
+  .md th { background: var(--surface2); font-weight: 700; white-space: nowrap; }
+  .md tr:nth-child(even) td { background: color-mix(in srgb, var(--surface2) 55%, transparent); }
+  .md blockquote { margin: 6px 0 10px; padding: 6px 12px; border-left: 3px solid var(--line2); color: var(--text2); }
+  .md hr { border: none; border-top: 1px solid var(--line); margin: 14px 0; }
+  .md ul ul, .md ol ul, .md ul ol { margin: 2px 0 2px; }
+  .md em { font-style: italic; color: var(--text2); }
+  .follow { margin: 8px 0 0 38px; border-radius: var(--r); padding: 1px; background: var(--line); }
+  .follow.on { background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 60%, transparent), color-mix(in srgb, var(--accent2) 50%, transparent)); }
+  .follow .in { border-radius: calc(var(--r) - 1px); background: var(--surface); padding: 14px 16px; }
+  .follow .q { font-size: 13px; color: var(--text2); margin-bottom: 8px; }
+  .follow .btns { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+  .follow .note { font-size: 12px; color: var(--muted); margin-left: auto; }
+  .errbox { margin: 10px 0 0 38px; white-space: pre-wrap; }
+
+  /* ---------- activity log ---------- */
+  .logbar { display: flex; gap: 14px; align-items: center; font-size: 12.5px; color: var(--muted); margin-bottom: 8px; flex-wrap: wrap; }
+  .logbar label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; user-select: none; }
+  .logbar input { accent-color: var(--accent); } .logbar .sp { flex: 1; }
+  .term { font-family: var(--mono); font-size: 12.5px; line-height: 1.6; background: var(--term); color: var(--term-text); border-radius: 12px; padding: 12px 6px 12px 12px; max-height: 66vh; overflow: auto; border: 1px solid var(--line); }
+  .ln { display: grid; grid-template-columns: 64px 20px 1fr; gap: 10px; padding: 2px 8px 2px 4px; border-radius: 6px; white-space: pre-wrap; word-break: break-word; }
+  .ln:hover { background: rgba(255,255,255,.04); } .ln.has { cursor: pointer; }
+  .ln .ts { color: #5b667d; font-variant-numeric: tabular-nums; } .ln .ic { text-align: center; color: #6b7590; }
+  .k-TOOL .m { color: #93c5fd; } .k-TOOL .m .tn { color: #c7d2fe; font-weight: 700; }
+  .k-TOOL_RESULT .m { color: #8b95ab; } .k-TEXT .m { color: #b8c0d2; font-style: italic; }
+  .k-STATE .m { color: #fbbf24; font-weight: 700; } .k-CLAUDE .m { color: #c4b5fd; font-weight: 600; }
+  .k-GIT .m { color: #fdba74; } .k-ERROR .m { color: #fca5a5; font-weight: 700; } .k-INFO .m { color: #a5b4fc; }
+  .ln.k-STATE, .ln.k-CLAUDE { margin-top: 4px; }
+  .det { display: none; margin: 2px 8px 8px 94px; padding: 10px 12px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.07); border-radius: 8px; color: #c7cfdf; white-space: pre-wrap; max-height: 340px; overflow: auto; font-size: 12px; }
+  .det.open { display: block; } .term .none { color: #5b667d; padding: 10px 6px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header id="topbar"></header>
+
+  <div class="body">
+    <aside class="panel-card sidebar">
+      <div class="ask">
+        <div class="lbl">새 질의</div>
+        <textarea class="in" id="qIn" placeholder="예) 스케줄 Call 작업 목록을 유형별로 표로 정리해줘&#10;Ctrl+Enter 로 보내기"></textarea>
+        <div class="lbl">대상 프로젝트 · 브랜치 <span style="font-weight:500;text-transform:none;letter-spacing:0">(첫 번째가 작업 디렉터리)</span></div>
+        <div class="pchips" id="projChips"><span class="skel" style="width:60%"></span></div>
+        <div id="branchRows"></div>
+        <div class="row2">
+          <select class="in" id="mdl" title="모델"></select>
+          <select class="in" id="eff" title="노력 단계"></select>
+        </div>
+        <label class="hint" style="display:flex;gap:6px;align-items:center;cursor:pointer" title="독립 검증자(테스트 모델, 새 세션)가 문서를 소스와 대조합니다. 틀린 곳이 있으면 작성 세션이 한 번 고쳐 씁니다. 토큰이 더 듭니다."><input type="checkbox" id="vfy" checked> 2차 검증 (독립 검증자가 소스와 대조 → 지적 시 수정)</label>
+        <div class="foot">
+          <div class="hint" id="askHint">소스를 읽기 전용으로 훑어 문서로 정리합니다. 코드 수정·빌드는 하지 않습니다.</div>
+          <button class="btn" id="rtBtn" onclick="routineToggle()" title="이 질문을 정해진 요일·시각마다 자동으로 실행(루틴)">예약</button>
+          <button class="btn primary" id="askBtn" onclick="submitNew()"></button>
+        </div>
+        <div class="rform" id="rform">
+          <div class="lbl" id="rfTitle">루틴으로 예약</div>
+          <div class="r"><input class="in" id="rfName" placeholder="이름: 예) 주간 배치 변경 정리" maxlength="80" autocomplete="off"><input class="in" id="rfTime" type="time" value="09:00"></div>
+          <div class="dchips" id="rfDays"></div>
+          <div class="foot">
+            <label class="hint" style="display:flex;gap:6px;align-items:center;cursor:pointer;flex:1" title="완료되면 자기방에 [질의] 알림을 보냅니다(메신저 연결 시)"><input type="checkbox" id="rfNotify"> 완료 알림</label>
+            <button class="btn sm" onclick="routineClose()">취소</button>
+            <button class="btn sm primary" onclick="routineSave()">루틴 저장</button>
+          </div>
+          <div class="hint" style="font-size:11.5px;color:var(--muted)">위의 질문·프로젝트·모델·검증 설정 그대로 예약합니다. 요일을 고르지 않으면 매일. 그 시각에 꺼져 있었다면 같은 날 켜질 때 한 번 실행합니다.</div>
+        </div>
+        <div class="lim" id="limBox" style="display:none"></div>
+      </div>
+      <div class="sec" id="rsec" style="display:none"><span>루틴</span><span class="n" id="rcount">0</span></div>
+      <div class="rlist" id="rlist"></div>
+      <div class="sec"><span>질의 스레드</span><span class="n" id="tcount">0</span></div>
+      <div class="tlist" id="tlist"><div class="skel"></div><div class="skel" style="width:70%"></div><div class="skel" style="width:85%"></div></div>
+    </aside>
+
+    <main class="panel-card content" id="main">
+      <div class="empty" id="noSel">
+        <div class="art" id="icEmpty"></div>
+        <h3>질의를 선택하거나 새로 올리세요</h3>
+        <p>왼쪽에서 질문을 쓰고 대상 프로젝트를 고르면, 에이전트가 소스를 훑어 마크다운 문서로 정리합니다. 결과 아래에서 이어서 질문할 수 있습니다(같은 세션 재사용).</p>
+      </div>
+      <div id="detail" style="display:none">
+        <section class="hero">
+          <div class="crumbs" id="dCrumbs"></div>
+          <h1 id="dTitle"></h1>
+          <div class="stats" id="dStats"></div>
+          <div class="runner" id="runner" style="display:none"></div>
+        </section>
+        <div class="seg tabs">
+          <button class="tab sel" data-p="res">결과 <span class="cnt" id="cntRes">0</span></button>
+          <button class="tab" data-p="log">활동 로그 <span class="cnt" id="cntLog">0</span></button>
+        </div>
+        <div class="pane sel" id="p-res">
+          <div id="items"></div>
+          <div class="follow" id="follow">
+            <div class="in">
+              <div class="q" id="fuQ"></div>
+              <textarea class="in" id="fuIn" placeholder="이어서 질문… 예) stat 계열만 cron 과 함께 표로. Enter 보내기 · Shift+Enter 줄바꿈"></textarea>
+              <div class="btns">
+                <button class="btn primary" id="fuBtn" onclick="submitFollowup()"></button>
+                <button class="btn danger" id="abBtn" onclick="abortJob()"></button>
+                <span class="note" id="fuNote"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="pane" id="p-log">
+          <div class="logbar">
+            <label><input type="checkbox" id="fTool" checked> 도구 호출</label>
+            <label><input type="checkbox" id="fRes"> 도구 결과</label>
+            <label><input type="checkbox" id="fText" checked> 모델 발화</label>
+            <span class="sp"></span>
+            <label><input type="checkbox" id="follow" checked> 자동 스크롤</label>
+          </div>
+          <div class="term" id="log"></div>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+<div class="toasts" id="toasts"></div>
+
+<script src="/ui.js"></script>
+<script>
+const { $, esc, fmt, hhmm, ago, dur, I, toast } = UI;
+UI.topbar('research', '질의 · 소스 조사 문서');
+$('strip').insertAdjacentHTML('beforeend', '<span class="chip live" id="live"><span class="dot"></span><span>연결 중</span></span>');
+UI.pollAgentChip && UI.pollAgentChip();
+$('icEmpty').innerHTML = I.search.replace(/width="15" height="15"/, 'width="30" height="30"');
+$('askBtn').innerHTML = I.send + '질문하기';
+$('fuBtn').innerHTML = I.send + '이어서 질문 <span class="kbd">⏎</span>';
+$('abBtn').innerHTML = I.x + '중단';
+
+const EVENT_BASE = 1000000000;
+const KOR = { NEW: '대기열', RUNNING: '조사 중', DONE: '완료', FAILED: '실패', ABORTED: '중단' };
+const CLS = { NEW: 'wait', RUNNING: 'run', DONE: 'ok', FAILED: 'err', ABORTED: 'err' };
+const ICON = { STATE: '⇢', INFO: 'ℹ', CLAUDE: '✦', TOOL: '›', TOOL_RESULT: '↳', TEXT: '…', GIT: '⎇', ERROR: '✖' };
+const CLAUDE_ICON = `<svg viewBox="0 0 44 44" aria-hidden="true" shape-rendering="crispEdges">
+  <rect x="10" y="4" width="24" height="4" fill="currentColor"/><rect x="8" y="8" width="28" height="24" fill="currentColor"/><rect x="10" y="32" width="24" height="4" fill="currentColor"/>
+  <rect x="4" y="16" width="4" height="10" fill="currentColor"/><rect x="36" y="16" width="4" height="10" fill="currentColor"/>
+  <rect x="12" y="36" width="7" height="6" fill="currentColor"/><rect x="25" y="36" width="7" height="6" fill="currentColor"/>
+  <rect x="8" y="8" width="28" height="6" fill="#fff" opacity=".12"/>
+  <rect x="15" y="14" width="5" height="9" fill="#1b1b1f"/><rect x="24" y="14" width="5" height="9" fill="#1b1b1f"/><rect x="16" y="15" width="2" height="2" fill="#fff" opacity=".85"/><rect x="25" y="15" width="2" height="2" fill="#fff" opacity=".85"/>
+</svg>`;
+const isActive = st => st === 'NEW' || st === 'RUNNING';
+const VERIFY = { PASS: ['ok', '검증 통과', '독립 검증자가 소스와 대조해 문제를 찾지 못했습니다'], FIXED: ['info', '검증 후 수정됨', '검증자의 지적을 작성 세션이 다시 확인해 반영했습니다'],
+  FAIL: ['err', '검증 실패(미수정)', '검증자가 문제를 지적했지만 수정하지 못했습니다. 검증 내역을 확인하세요'], SKIPPED: ['gray', '검증 생략', '검증을 실행하지 못했거나 판정을 읽지 못했습니다'] };
+function toggleVerify(id) { const el = $('vr-' + id); if (el) el.style.display = el.style.display === 'none' ? '' : 'none'; }
+
+let options = { projects: [], models: [], efforts: [] }, selEntries = [];
+const branchCache = {};                       // 프로젝트 경로 → { defaultBranch, branches[] } (처음 고를 때 조회)
+const entryStr = e => e.b ? e.p + '@' + e.b : e.p;
+// 표시용: "group/repo@feature/x" → "repo@feature/x"
+const shortEntry = s => { const at = s.indexOf('@'); const path = at < 0 ? s : s.slice(0, at); return path.split('/').pop() + (at < 0 ? '' : '@' + s.slice(at + 1)); };
+const saveEntries = () => { try { localStorage.setItem('research.entries', JSON.stringify(selEntries)); } catch (e) {} };
+let threads = [], overview = {}, selRoot = null, thread = null, events = [], eventIds = [], lastEventId = 0, es = null;
+const hashId = () => { const m = /#r=(\d+)/.exec(location.hash); return m ? Number(m[1]) : null; };
+
+// ---------------------------------------------------------------- 새 질의 폼
+async function loadOptions() {
+  try { options = await (await fetch('/api/research/options')).json(); } catch (e) { toast('옵션 조회 실패', 'err'); return; }
+  try { const saved = JSON.parse(localStorage.getItem('research.entries') || '[]'); selEntries = saved.filter(e => e && options.projects.includes(e.p)).map(e => ({ p: e.p, b: e.b || null })); } catch (e) { selEntries = []; }
+  if (!selEntries.length && options.projects.length === 1) selEntries = [{ p: options.projects[0], b: null }];
+  renderChips(); selEntries.forEach(e => loadBranches(e.p));
+  $('mdl').innerHTML = options.models.map(m => `<option value="${m}" ${m === options.defaultModel ? 'selected' : ''}>${m}${m === options.defaultModel ? ' (기본)' : ''}</option>`).join('');
+  $('eff').innerHTML = options.efforts.map(e => `<option value="${e}" ${e === options.defaultEffort ? 'selected' : ''}>${e}${e === options.defaultEffort ? ' (기본)' : ''}</option>`).join('');
+  $('askHint').textContent = `읽기 전용으로 소스를 훑어 문서로 정리합니다(상한 ${options.timeoutMin}분/${options.maxTurns}턴). 코드 수정·빌드 없음.`;
+  $('vfy').checked = options.defaultVerify !== false;
+  if (!options.enabled) { $('askBtn').disabled = true; $('askHint').textContent = '질의 워크플로우가 꺼져 있습니다(research.enabled / gitlab.enabled).'; }
+}
+function renderChips() {
+  const box = $('projChips');
+  if (!options.projects.length) { box.innerHTML = '<span class="md-empty">대상 프로젝트가 없습니다. 플랫폼 → 에이전트 설정 → 대상 프로젝트에 추가하세요.</span>'; $('branchRows').innerHTML = ''; return; }
+  box.innerHTML = options.projects.map(p => { const i = selEntries.findIndex(e => e.p === p); return `<button class="pc ${i >= 0 ? 'sel' : ''}" onclick="toggleProj('${esc(p)}')" title="${esc(p)}">${i >= 0 ? `<span class="o">${i + 1}</span>` : ''}${esc(p.split('/').pop())}</button>`; }).join('');
+  renderBranchRows();
+}
+// 선택한 프로젝트마다 브랜치 고르기. + 를 누르면 같은 프로젝트의 다른 브랜치를 한 줄 더 넣는다(브랜치 간 비교 질의).
+function renderBranchRows() {
+  $('branchRows').innerHTML = selEntries.map((e, i) => {
+    const c = branchCache[e.p]; const def = c && c.defaultBranch;
+    const names = c ? c.branches.slice() : []; if (e.b && !names.includes(e.b)) names.unshift(e.b);
+    const opts = `<option value="">${def ? esc(def) + ' (기본)' : (c && c.error ? '기본 브랜치' : '불러오는 중…')}</option>`
+      + names.filter(n => n !== def).map(n => `<option value="${esc(n)}" ${n === e.b ? 'selected' : ''}>${esc(n)}</option>`).join('');
+    return `<div class="brow" title="${esc(e.p)}"><span class="n">${i + 1}</span><span class="nm">${esc(e.p.split('/').pop())}</span>
+      <select class="in" title="조사할 브랜치" onchange="setBranch(${i}, this.value)">${opts}</select>
+      <button class="mini" onclick="addBranchRow(${i})" title="같은 프로젝트의 다른 브랜치를 함께 조사(브랜치 비교)">+</button>
+      <button class="mini" onclick="removeEntry(${i})" title="빼기">×</button></div>`;
+  }).join('');
+}
+async function loadBranches(p) {
+  if (branchCache[p]) return;
+  branchCache[p] = { branches: [], loading: true };
+  try { const d = await (await fetch('/api/research/branches?project=' + encodeURIComponent(p))).json(); branchCache[p] = { defaultBranch: d.defaultBranch, branches: d.branches || [], error: d.error }; }
+  catch (e) { branchCache[p] = { branches: [], error: String(e) }; }
+  renderBranchRows();
+}
+function toggleProj(p) {
+  if (selEntries.some(e => e.p === p)) selEntries = selEntries.filter(e => e.p !== p); else { selEntries.push({ p, b: null }); loadBranches(p); }
+  saveEntries(); renderChips();
+}
+function setBranch(i, v) { selEntries[i].b = v || null; saveEntries(); }
+function addBranchRow(i) { selEntries.splice(i + 1, 0, { p: selEntries[i].p, b: null }); saveEntries(); renderChips(); }
+function removeEntry(i) { selEntries.splice(i, 1); saveEntries(); renderChips(); }
+async function submitNew() {
+  const q = $('qIn').value.trim();
+  if (!q) { toast('질문을 입력하세요', 'err'); $('qIn').focus(); return; }
+  if (!selEntries.length) { toast('대상 프로젝트를 고르세요', 'err'); return; }
+  const strs = selEntries.map(entryStr);
+  if (new Set(strs).size !== strs.length) { toast('같은 프로젝트·브랜치가 두 번 들어 있습니다', 'err'); return; }
+  $('askBtn').disabled = true;
+  try {
+    const r = await (await fetch('/api/research', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ question: q, projects: strs.join(','), model: $('mdl').value, effort: $('eff').value, verify: $('vfy').checked }) })).json();
+    toast(r.result, r.ok ? 'ok' : 'err');
+    if (r.ok) { $('qIn').value = ''; await loadOverview(); selectThread(r.rootId); }
+  } catch (e) { toast('접수 실패: ' + e, 'err'); }
+  finally { $('askBtn').disabled = !options.enabled; }
+}
+$('qIn').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); submitNew(); } });
+
+// ---------------------------------------------------------------- 루틴(예약 질의)
+const DAY_KEYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'], DAY_KO = ['월', '화', '수', '목', '금', '토', '일'];
+let routines = [], rfDays = [], rfId = null;
+function daysLabel(days) {
+  if (!days || !days.length || days.length === 7) return '매일';
+  if (days.join() === 'MON,TUE,WED,THU,FRI') return '평일';
+  return days.map(d => DAY_KO[DAY_KEYS.indexOf(d)]).join('·');
+}
+function renderDayChips() { $('rfDays').innerHTML = DAY_KEYS.map((d, i) => `<button class="dc ${rfDays.includes(d) ? 'sel' : ''}" onclick="toggleDay('${d}')">${DAY_KO[i]}</button>`).join(''); }
+function toggleDay(d) { const i = rfDays.indexOf(d); if (i >= 0) rfDays.splice(i, 1); else rfDays.push(d); renderDayChips(); }
+function routineToggle() { if ($('rform').classList.contains('open')) routineClose(); else routineOpen(null); }
+function routineOpen(r) {
+  rfId = r ? r.id : null;
+  $('rfTitle').textContent = r ? '루틴 수정 — ' + r.name : '루틴으로 예약';
+  $('rfName').value = r ? r.name : ''; $('rfTime').value = r ? r.runAt : '09:00'; $('rfNotify').checked = r ? r.notify : false;
+  rfDays = r ? [...r.days] : ['MON', 'TUE', 'WED', 'THU', 'FRI'];
+  if (r) {   // 수정: 저장된 내용을 위 질의 폼에 올린다
+    $('qIn').value = r.question;
+    selEntries = r.projects.map(e => { const at = e.indexOf('@'); return at < 0 ? { p: e, b: null } : { p: e.slice(0, at), b: e.slice(at + 1) }; }).filter(e => options.projects.includes(e.p));
+    saveEntries(); renderChips(); selEntries.forEach(e => loadBranches(e.p));
+    if (r.model) $('mdl').value = r.model; if (r.effort) $('eff').value = r.effort;
+    $('vfy').checked = r.verify == null ? options.defaultVerify !== false : r.verify;
+  }
+  renderDayChips(); $('rform').classList.add('open'); $('rfName').focus();
+}
+function routineClose() { $('rform').classList.remove('open'); rfId = null; }
+async function routineSave() {
+  const q = $('qIn').value.trim(), name = $('rfName').value.trim();
+  if (!name) { toast('루틴 이름을 입력하세요', 'err'); $('rfName').focus(); return; }
+  if (!q) { toast('질문을 입력하세요', 'err'); $('qIn').focus(); return; }
+  if (!selEntries.length) { toast('대상 프로젝트를 고르세요', 'err'); return; }
+  const cur = rfId != null ? routines.find(x => x.id === rfId) : null;
+  const body = new URLSearchParams({ name, question: q, projects: selEntries.map(entryStr).join(','), runAt: $('rfTime').value, days: rfDays.join(','),
+    model: $('mdl').value, effort: $('eff').value, verify: $('vfy').checked, notify: $('rfNotify').checked, enabled: cur ? cur.enabled : true });
+  if (rfId != null) body.set('id', rfId);
+  try {
+    const r = await (await fetch('/api/routines', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body })).json();
+    toast(r.result, r.ok ? 'ok' : 'err');
+    if (r.ok) { routineClose(); $('qIn').value = ''; loadRoutines(); }
+  } catch (e) { toast('저장 실패: ' + e, 'err'); }
+}
+async function loadRoutines() {
+  try { routines = (await (await fetch('/api/routines')).json()).routines || []; } catch (e) { return; }
+  $('rsec').style.display = routines.length ? '' : 'none'; $('rcount').textContent = routines.length;
+  $('rlist').innerHTML = routines.map(r => `<div class="ritem ${r.enabled ? '' : 'off'}">
+      <div class="ri" onclick="routineOpen(routines.find(x => x.id === ${r.id}))" title="${esc(r.question)}">
+        <div class="rn">${esc(r.name)}</div>
+        <div class="rs">${daysLabel(r.days)} ${esc(r.runAt)} · ${esc(r.projects.map(shortEntry).join(' + '))}${r.enabled ? (r.nextRunAt ? ' · 다음 ' + fmt(r.nextRunAt) : '') : ' · 꺼짐'}</div>
+      </div>
+      ${r.lastJobId ? `<button onclick="selectThread(${r.lastJobId})" title="마지막 실행 결과 #${r.lastJobId}${r.lastRunAt ? ' · ' + ago(r.lastRunAt) : ''}">↗</button>` : ''}
+      <button onclick="routineRun(${r.id})" title="지금 한 번 실행">▶</button>
+      <button onclick="routineEnable(${r.id}, ${!r.enabled})" title="${r.enabled ? '끄기' : '켜기'}">${r.enabled ? '⏸' : '⏵'}</button>
+      <button onclick="routineDelete(${r.id})" title="삭제">✕</button>
+    </div>`).join('');
+}
+async function routinePost(path, params) {
+  try { const r = await (await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(params) })).json(); toast(r.result, r.ok ? 'ok' : 'err'); return r; }
+  catch (e) { toast('요청 실패: ' + e, 'err'); return { ok: false }; }
+}
+async function routineRun(id) { const r = await routinePost('/api/routines/run', { id }); if (r.ok) { await loadOverview(); selectThread(r.jobId); loadRoutines(); } }
+async function routineEnable(id, on) {
+  const r = routines.find(x => x.id === id); if (!r) return;
+  await routinePost('/api/routines', { id, name: r.name, question: r.question, projects: r.projects.join(','), runAt: r.runAt, days: r.days.join(','),
+    model: r.model || '', effort: r.effort || '', ...(r.verify == null ? {} : { verify: r.verify }), notify: r.notify, enabled: on });
+  loadRoutines();
+}
+async function routineDelete(id) {
+  const r = routines.find(x => x.id === id); if (!r || !confirm(`루틴 '${r.name}' 을 삭제할까요? 이미 실행된 질의 결과는 남습니다.`)) return;
+  await routinePost('/api/routines/delete', { id }); loadRoutines();
+}
+
+// ---------------------------------------------------------------- 목록
+async function loadOverview() {
+  try { overview = await (await fetch('/api/research?limit=100')).json(); } catch (e) { return; }
+  threads = overview.threads || [];
+  $('tcount').textContent = threads.length;
+  const lim = $('limBox');
+  if (overview.limited) { lim.style.display = 'block'; lim.textContent = `⚠ Claude 사용량 한도 — 리셋(${overview.limitUntil || '?'}) 뒤 대기열이 자동으로 시작됩니다.`; } else lim.style.display = 'none';
+  renderList();
+  if (selRoot == null && threads.length) {
+    const h = hashId();
+    selectThread(h != null && threads.some(t => t.id === h) ? h : threads[0].id);
+  } else if (selRoot != null) {
+    const t = threads.find(x => x.id === selRoot);
+    if (t && thread && (t.state !== thread.state || t.updatedAt !== thread.updatedAt)) loadThread(false);
+    renderRunner();
+  }
+}
+function running() { return overview.running || null; }
+function renderList() {
+  const box = $('tlist');
+  if (!threads.length) { box.innerHTML = '<div class="md-empty">아직 질의가 없습니다.<br>왼쪽 위에서 첫 질문을 올려 보세요.</div>'; return; }
+  box.innerHTML = threads.map(t => {
+    const r = running(); const mine = r && r.rootId === t.id;
+    return `<div class="titem st-${CLS[t.state] || 'info'} ${t.id === selRoot ? 'sel' : ''}" onclick="selectThread(${t.id})">
+      <div class="r1"><span class="pr">${mine ? `<i class="runmini m-${esc(r.model)}" title="${esc(r.model)} 실행 중"></i>` : ''}${esc(t.projects.map(shortEntry).join(' + '))} <b>#${t.id}</b></span><span class="badge ${CLS[t.state] || 'gray'}">${KOR[t.state] || t.state}</span></div>
+      <div class="q" title="${esc(t.question)}">${esc(t.question)}</div>
+      <div class="r3"><span>${ago(t.updatedAt)}</span><span class="m-${esc(t.model)}">${esc(t.model)}</span>${t.followups ? `<span>후속 ${t.followups}</span>` : ''}${t.verifyState && VERIFY[t.verifyState] ? `<span title="${VERIFY[t.verifyState][2]}">${VERIFY[t.verifyState][1]}</span>` : ''}${t.requester === 'messenger' ? '<span>메신저</span>' : t.requester === 'routine' ? '<span>루틴</span>' : ''}</div>
+    </div>`;
+  }).join('');
+}
+function selectThread(id) {
+  if (selRoot !== id) { selRoot = id; thread = null; events = []; eventIds = []; lastEventId = 0; $('log').innerHTML = ''; $('items').innerHTML = ''; history.replaceState(null, '', '#r=' + id); }
+  renderList();
+  loadThread(true);
+}
+window.addEventListener('hashchange', () => { const h = hashId(); if (h != null && h !== selRoot) selectThread(h); });
+
+// ---------------------------------------------------------------- 상세
+async function loadThread(full) {
+  if (selRoot == null) return;
+  const id = selRoot; let d;
+  try { const res = await fetch(`/api/research/${id}?afterId=${full ? 0 : lastEventId}&limit=3000`); if (!res.ok) throw new Error(res.status); d = await res.json(); } catch (e) { return; }
+  if (id !== selRoot) return;
+  const items = d.items || [];
+  const last = items[items.length - 1];
+  thread = { rootId: d.rootId, items, state: last ? last.state : 'NEW', updatedAt: last ? last.updatedAt : null };
+  eventIds = d.eventIds || [];
+  if (full) events = d.events || []; else (d.events || []).forEach(e => { if (!events.some(x => x.id === e.id)) events.push(e); });
+  if (events.length) lastEventId = Math.max(lastEventId, ...events.map(e => e.id));
+  renderDetail(); renderItems(); renderLog(); renderRunner();
+}
+function stat(l, v, unit, title) { return `<div class="stat"${title ? ` title="${esc(title)}"` : ''}><div class="l">${l}</div><div class="v">${esc(v)}${unit ? `<small>${unit}</small>` : ''}</div></div>`; }
+const kfmt = n => n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(n >= 1e5 ? 0 : 1) + 'k' : String(n);
+function renderDetail() {
+  $('noSel').style.display = 'none'; $('detail').style.display = 'block';
+  const root = thread.items[0]; const last = thread.items[thread.items.length - 1];
+  const projs = (root.projects || '').split(',').filter(Boolean);
+  $('dCrumbs').innerHTML = projs.map(p => { const at = p.indexOf('@'); return `<span class="proj">${esc(at < 0 ? p : p.slice(0, at))}${at < 0 ? '' : ` <b style="color:var(--accent)">@${esc(p.slice(at + 1))}</b>`}</span>`; }).join('') + `<span class="badge ${CLS[last.state] || 'gray'}">${KOR[last.state] || last.state}</span>` + (root.requester === 'messenger' ? '<span class="badge gray">메신저 접수</span>' : root.requester === 'routine' ? '<span class="badge gray">루틴 실행</span>' : '');
+  $('dTitle').textContent = root.question;
+  const tok = thread.items.reduce((a, j) => { a.in += j.inputTokens || 0; a.out += j.outputTokens || 0; return a; }, { in: 0, out: 0 });
+  const turns = thread.items.reduce((a, j) => a + (j.turns || 0), 0);
+  const elapsed = thread.items.reduce((a, j) => a + (j.elapsedMs || 0), 0) + (isActive(last.state) && last.startedAt ? Date.now() - new Date(last.startedAt).getTime() : 0);
+  $('dStats').innerHTML = stat('질문', thread.items.length, '건') + stat('소요', dur(elapsed)) + stat('턴', turns)
+    + stat('토큰', (tok.in || tok.out) ? `↑${kfmt(tok.in)} ↓${kfmt(tok.out)}` : '—', '', '입력(캐시 포함) ↑ · 출력 ↓')
+    + stat('모델', `${root.model} / ${root.effort}`) + stat('시작', fmt(root.createdAt));
+  $('cntRes').textContent = thread.items.length;
+}
+function renderRunner() {
+  const box = $('runner'); if (!thread) { box.style.display = 'none'; return; }
+  const r = running(); const last = thread.items[thread.items.length - 1];
+  if (r && r.rootId === thread.rootId) {
+    box.style.display = 'flex'; box.className = 'runner m-' + esc(r.model);
+    box.innerHTML = `<div class="av">${CLAUDE_ICON}</div><div><div class="nm">${esc(r.model)}<small>${esc(r.effort)}</small></div><div class="sub">#${r.id} 소스 조사 중 · ${dur(Date.now() - r.startedAt)}</div></div>`;
+  } else if (last && last.state === 'NEW') {
+    box.style.display = 'flex'; box.className = 'runner';
+    box.innerHTML = `<div class="av" style="opacity:.5">${CLAUDE_ICON}</div><div><div class="nm" style="text-transform:none">대기열</div><div class="sub">${overview.limited ? '사용량 한도 — 리셋 뒤 자동 시작' : '앞선 질의가 끝나면 시작합니다'}</div></div>`;
+  } else box.style.display = 'none';
+}
+setInterval(() => { if (thread) { renderRunner(); const last = thread.items[thread.items.length - 1]; if (isActive(last.state)) { renderDetail(); const w = document.querySelector('.abox .wait .el'); if (w && last.startedAt) w.textContent = dur(Date.now() - new Date(last.startedAt).getTime()); } } }, 1000);
+
+function renderItems() {
+  const box = $('items');
+  box.innerHTML = thread.items.map((j, i) => {
+    let ans;
+    if (j.state === 'DONE') {
+      ans = `<div class="abox"><div class="bar"><span>✦ ${esc(j.model)} / ${esc(j.effort)} · ${j.turns}턴 · ${dur(j.elapsedMs)} · ↑${kfmt(j.inputTokens)} ↓${kfmt(j.outputTokens)}</span><span class="sp"></span>
+          ${j.verifyState && VERIFY[j.verifyState] ? `<button class="badge ${VERIFY[j.verifyState][0]}" style="cursor:pointer" title="${VERIFY[j.verifyState][2]} — 눌러서 검증 내역 보기" onclick="toggleVerify(${j.id})">${VERIFY[j.verifyState][1]}</button>` : (j.verify ? '' : '<span class="badge gray" title="이 질문은 2차 검증 없이 작성되었습니다">검증 안 함</span>')}
+          <button class="btn sm" onclick="copyMd(${j.id})" title="마크다운 원문 복사">복사</button><a class="btn sm" href="/api/research/${j.id}/download" title="research-${j.id}.md 내려받기">.md</a></div>
+          ${j.verifyMd ? `<div class="vrep md" id="vr-${j.id}" style="display:none"><div class="vh">2차 검증 내역 — 독립 검증자 보고</div>${md(j.verifyMd)}</div>` : ''}
+          <div class="doc md" id="doc-${j.id}">${md(j.resultMd || '')}</div></div>`;
+    } else if (isActive(j.state)) {
+      ans = `<div class="abox"><div class="wait"><span class="m-${esc(j.model)}" style="width:28px;height:28px;display:inline-block">${CLAUDE_ICON}</span><span>${j.state === 'NEW' ? '대기열에서 차례를 기다리는 중' : '소스를 훑어 문서를 작성하는 중'}<span class="dots"><i></i><i></i><i></i></span></span><span class="el" style="margin-left:auto;color:var(--muted);font-family:var(--mono);font-size:12px">${j.startedAt ? dur(Date.now() - new Date(j.startedAt).getTime()) : ''}</span></div></div>`;
+    } else {
+      ans = `<div class="callout err errbox"><b>${KOR[j.state] || j.state}</b>${j.lastError ? '\n' + esc(j.lastError) : ''}</div>`;
+    }
+    return `<div class="qa" id="qa-${j.id}">
+      <div class="qbox"><div class="who">${i === 0 ? 'Q' : 'Q' + (i + 1)}</div><div style="flex:1;min-width:0"><div class="qt">${esc(j.question)}</div><div class="meta"><span>#${j.id}</span><span>${fmt(j.createdAt)}</span></div></div></div>
+      ${ans}</div>`;
+  }).join('');
+  const last = thread.items[thread.items.length - 1];
+  const fo = $('follow'); const active = isActive(last.state);
+  fo.className = 'follow ' + (active ? '' : 'on');
+  $('fuQ').innerHTML = active ? '진행 중인 질문이 끝나면 이어서 질문할 수 있습니다.' : (last.state === 'DONE' ? '같은 세션을 이어서 질문합니다 — 이미 읽은 코드 맥락을 재사용하므로 빠르고 토큰도 적게 듭니다.' : '실패한 스레드도 세션이 남아 있으면 이어서 질문할 수 있습니다.');
+  $('fuIn').disabled = active; $('fuBtn').disabled = active;
+  $('abBtn').style.display = active ? '' : 'none';
+  $('fuNote').textContent = active ? `#${last.id} ${KOR[last.state]}` : '';
+}
+async function submitFollowup() {
+  if (!thread) return;
+  const q = $('fuIn').value.trim(); if (!q) { toast('질문을 입력하세요', 'err'); return; }
+  const last = thread.items[thread.items.length - 1];
+  $('fuBtn').disabled = true;
+  try {
+    const r = await (await fetch('/api/research', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ question: q, parentId: last.id }) })).json();
+    toast(r.result, r.ok ? 'ok' : 'err');
+    if (r.ok) { $('fuIn').value = ''; await loadOverview(); loadThread(true); }
+  } catch (e) { toast('접수 실패: ' + e, 'err'); }
+  finally { $('fuBtn').disabled = false; }
+}
+$('fuIn').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitFollowup(); } });
+async function abortJob() {
+  if (!thread) return;
+  const last = thread.items[thread.items.length - 1];
+  if (!confirm(`#${last.id} 질의를 중단할까요?`)) return;
+  try { const r = await (await fetch(`/api/research/${last.id}/abort`, { method: 'POST' })).json(); toast(r.result); setTimeout(() => { loadOverview(); loadThread(true); }, 600); } catch (e) { toast('중단 실패: ' + e, 'err'); }
+}
+function copyMd(id) {
+  const j = thread && thread.items.find(x => x.id === id); if (!j) return;
+  navigator.clipboard.writeText(j.resultMd || '').then(() => toast('마크다운을 복사했습니다', 'ok'), () => toast('복사 실패', 'err'));
+}
+
+// ---------------------------------------------------------------- 활동 로그
+function logVisible(e) {
+  if (e.kind === 'TOOL' && !$('fTool').checked) return false;
+  if (e.kind === 'TEXT' && !$('fText').checked) return false;
+  if (e.kind === 'TOOL_RESULT' && !$('fRes').checked) return false;
+  return true;
+}
+function fmtMsg(e) {
+  if (e.kind === 'TOOL') { const i = e.message.indexOf(' '); return i > 0 ? `<span class="tn">${esc(e.message.slice(0, i))}</span> ${esc(e.message.slice(i + 1))}` : `<span class="tn">${esc(e.message)}</span>`; }
+  return esc(e.message);
+}
+function hasDet(e) { return !!(e.hasDetail || (e.detail && e.detail.trim() && e.detail.trim() !== e.message)); }
+function logLine(e) {
+  const has = hasDet(e);
+  return `<div class="ln k-${e.kind} ${has ? 'has' : ''}" data-id="${e.id}" onclick="toggleDet(this)"><span class="ts">${hhmm(e.createdAt)}</span><span class="ic">${ICON[e.kind] || '·'}</span><span class="m">${fmtMsg(e)}</span></div>`
+    + (has ? `<div class="det" id="det-${e.id}">${e.detail ? esc(e.detail) : ''}</div>` : '');
+}
+async function fillDetail(id, box) {
+  if (!box || box.dataset.loaded) return;
+  const ev = events.find(x => x.id === id);
+  if (ev && ev.detail) { box.textContent = ev.detail; box.dataset.loaded = '1'; return; }
+  box.textContent = '불러오는 중…';
+  try { const full = await (await fetch(`/api/agent/events/${id}`)).json(); if (ev) ev.detail = full.detail; box.textContent = full.detail || '(본문 없음)'; }
+  catch (_) { box.textContent = '(조회 실패)'; }
+  box.dataset.loaded = '1';
+}
+function toggleDet(el) { const id = Number(el.dataset.id); const d = $('det-' + id); if (!d) return; d.classList.toggle('open'); if (d.classList.contains('open')) fillDetail(id, d); }
+function renderLog() {
+  const box = $('log'); const vis = events.filter(logVisible);
+  box.innerHTML = vis.map(logLine).join('') || '<div class="none">아직 활동이 없습니다. 조사가 시작되면 여기에 실시간으로 표시됩니다.</div>';
+  $('cntLog').textContent = vis.length;
+  if ($('follow').checked) box.scrollTop = box.scrollHeight;
+}
+function appendLog(e) {
+  const box = $('log');
+  if (box.querySelector('.none')) box.innerHTML = '';
+  if (logVisible(e)) { box.insertAdjacentHTML('beforeend', logLine(e)); if ($('follow').checked) box.scrollTop = box.scrollHeight; }
+  $('cntLog').textContent = events.filter(logVisible).length;
+}
+['fTool', 'fText', 'fRes'].forEach(id => $(id).addEventListener('change', renderLog));
+
+// ---------------------------------------------------------------- tabs
+document.querySelectorAll('.tabs .tab').forEach(t => t.addEventListener('click', () => {
+  document.querySelectorAll('.tabs .tab').forEach(x => x.classList.remove('sel')); t.classList.add('sel');
+  document.querySelectorAll('.pane').forEach(p => p.classList.toggle('sel', p.id === 'p-' + t.dataset.p));
+  if (t.dataset.p === 'log' && $('follow').checked) { const b = $('log'); b.scrollTop = b.scrollHeight; }
+}));
+
+// ---------------------------------------------------------------- markdown (표·코드·목록·인용)
+function md(src) {
+  const lines = src.replace(/\r/g, '').split('\n'); let out = '', i = 0;
+  const inline = s => esc(s)
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
+    .replace(/(^|[\s(])\*([^*\n]+)\*(?=[\s).,]|$)/g, '$1<em>$2</em>')
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank">$1</a>')
+    .replace(/(^|[^"'>])(https?:\/\/[^\s<)]+)/g, '$1<a href="$2" target="_blank">$2</a>');
+  const isTableRow = l => /^\s*\|.*\|\s*$/.test(l);
+  const isSep = l => /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/.test(l);
+  const cells = l => l.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(c => c.trim());
+  while (i < lines.length) {
+    const l = lines[i];
+    if (l.startsWith('```')) { let code = ''; i++; while (i < lines.length && !lines[i].startsWith('```')) { code += esc(lines[i]) + '\n'; i++; } i++; out += `<pre><code>${code}</code></pre>`; continue; }
+    if (isTableRow(l) && i + 1 < lines.length && isSep(lines[i + 1])) {
+      const head = cells(l); i += 2; let rows = '';
+      while (i < lines.length && isTableRow(lines[i])) { rows += '<tr>' + cells(lines[i]).map(c => `<td>${inline(c)}</td>`).join('') + '</tr>'; i++; }
+      out += `<table><thead><tr>${head.map(c => `<th>${inline(c)}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table>`; continue;
+    }
+    let m;
+    if ((m = /^(#{1,4})\s+(.*)$/.exec(l))) { out += `<h${m[1].length}>${inline(m[2])}</h${m[1].length}>`; i++; continue; }
+    if (/^\s*([-*_])(\s*\1){2,}\s*$/.test(l)) { out += '<hr>'; i++; continue; }
+    if (/^\s*>/.test(l)) { let q = ''; while (i < lines.length && /^\s*>/.test(lines[i])) { q += inline(lines[i].replace(/^\s*>\s?/, '')) + '<br>'; i++; } out += `<blockquote>${q.replace(/<br>$/, '')}</blockquote>`; continue; }
+    if (/^\s*([-*•]|\d+[.)])\s+/.test(l)) {
+      // 들여쓰기 2단계까지의 목록
+      const stack = []; let html = '';
+      while (i < lines.length && (m = /^(\s*)([-*•]|\d+[.)])\s+(.*)$/.exec(lines[i]))) {
+        const depth = Math.min(2, Math.floor(m[1].replace(/\t/g, '  ').length / 2)); const type = /\d/.test(m[2]) ? 'ol' : 'ul';
+        while (stack.length > depth + 1) html += `</li></${stack.pop()}>`;
+        if (stack.length === depth + 1) html += '</li>';
+        while (stack.length < depth + 1) { html += `<${type}>`; stack.push(type); }
+        html += `<li>${inline(m[3])}`; i++;
+      }
+      while (stack.length) html += `</li></${stack.pop()}>`;
+      out += html; continue;
+    }
+    if (!l.trim()) { i++; continue; }
+    let p = l; i++;
+    while (i < lines.length && lines[i].trim() && !/^(#{1,4}\s|```|\s*([-*•]|\d+[.)])\s|\s*>|\s*\|)/.test(lines[i])) { p += '\n' + lines[i]; i++; }
+    out += `<p>${inline(p).replace(/\n/g, '<br>')}</p>`;
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------- SSE
+function connect() {
+  if (es) es.close();
+  es = new EventSource('/api/agent/stream');
+  const live = $('live');
+  es.onopen = () => { live.className = 'chip live on'; live.innerHTML = '<span class="dot"></span><span>실시간 연결됨</span>'; };
+  es.onerror = () => { live.className = 'chip live'; live.innerHTML = '<span class="dot"></span><span>재연결 중…</span>'; };
+  es.addEventListener('event', ev => {
+    let e; try { e = JSON.parse(ev.data); } catch (_) { return; }
+    if (e.sessionId < EVENT_BASE) return;                     // 이슈 세션 이벤트는 무시
+    if (eventIds.includes(e.sessionId)) {
+      if (!(e.id > 0 && events.some(x => x.id === e.id))) { events.push(e); lastEventId = Math.max(lastEventId, e.id || 0); appendLog(e); }
+      if (e.kind === 'STATE' || e.kind === 'ERROR') setTimeout(() => { loadOverview(); loadThread(false); }, 400);
+      if (e.kind === 'STATE') toast(`#${e.sessionId - EVENT_BASE} · ${KOR[e.detail] || e.message}`, e.detail === 'FAILED' ? 'err' : (e.detail === 'DONE' ? 'ok' : ''));
+    } else if (e.kind === 'STATE') setTimeout(loadOverview, 400);
+  });
+}
+
+loadOptions().then(loadRoutines); loadOverview(); connect();
+UI.every(loadOverview, 15000);
+UI.every(loadRoutines, 60000);
+</script>
+</body>
+</html>

@@ -1,0 +1,72 @@
+package io.github.lib0823.devagent.messenger.none;
+
+import io.github.lib0823.devagent.messenger.IncomingMessage;
+import io.github.lib0823.devagent.messenger.MessengerPort;
+import io.github.lib0823.devagent.messenger.Room;
+import io.github.lib0823.devagent.messenger.RoomKind;
+import io.github.lib0823.devagent.platform.PortHealth;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.stereotype.Component;
+
+import java.util.List;
+
+/**
+ * 메신저 없이 돌리는 어댑터({@code platform.messenger=none}). 방은 없고 전송은 버린다 — 화면(에이전트·질의·플랫폼)만 쓰는 설치나
+ * 메신저 어댑터를 추가하지 않은 기본 설치에서 쓰인다(기본값).
+ * 확인·알림은 대시보드로만 오간다.
+ */
+@Component
+@ConditionalOnProperty(prefix = "platform", name = "messenger", havingValue = "none")
+public class NoMessengerAdapter implements MessengerPort {
+
+    public static final String PROVIDER = "none";
+
+    private static final Logger log = LoggerFactory.getLogger(NoMessengerAdapter.class);
+
+    @Override
+    public String provider() {
+        return PROVIDER;
+    }
+
+    @Override
+    public PortHealth health() {
+        return PortHealth.of(PROVIDER, PortHealth.WARN, "메신저 미연결 — 알림·확인은 화면에서만. MessengerPort 어댑터를 추가하면 연결");
+    }
+
+    @Override
+    public String selfId() {
+        return "0";
+    }
+
+    @Override
+    public void connect() {
+        // 연결할 곳 없음
+    }
+
+    @Override
+    public void reset() {
+        // 세션 없음
+    }
+
+    @Override
+    public List<Room> rooms() {
+        return List.of();
+    }
+
+    @Override
+    public List<IncomingMessage> latest(Room room, int size) {
+        return List.of();
+    }
+
+    @Override
+    public List<IncomingMessage> after(Room room, String sinceMessageId, int size) {
+        return List.of();
+    }
+
+    @Override
+    public void send(RoomKind kind, String roomId, String text) {
+        log.debug("메신저 미연결 — 전송 생략({}자)", text == null ? 0 : text.length());
+    }
+}

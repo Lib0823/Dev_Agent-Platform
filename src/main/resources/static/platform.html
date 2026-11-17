@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="ko" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>플랫폼 · Dev Agent</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%278%27 fill=%27%236d5dfc%27/%3E%3Cpath d=%27M9 11h14M9 16h10M9 21h7%27 stroke=%27white%27 stroke-width=%272.6%27 stroke-linecap=%27round%27/%3E%3C/svg%3E">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<link rel="stylesheet" href="/ui.css">
+<link rel="stylesheet" href="/admin.css">
+</head>
+<body>
+<div class="app">
+  <header id="topbar"></header>
+
+  <div class="wrap">
+    <div class="grid pgrid">
+      <div class="col">
+        <section class="card">
+          <h2><span class="ic" id="icSys"></span>시스템<span class="sp"></span><span class="hint" id="sysSummary"></span></h2>
+          <div class="det-line" id="sysInfo"><div class="skel" style="width:70%"></div></div>
+          <div class="sec" style="margin:12px 0 2px"><span>설치 점검</span><button class="btn sm" id="doctorBtn" onclick="loadDoctor(true)">다시 점검</button></div>
+          <div id="doctorList"><div class="skel" style="margin:6px 0"></div><div class="skel" style="margin:6px 0;width:60%"></div></div>
+          <div class="hint" id="envHint" style="margin-top:8px"></div>
+          <div class="sec" style="margin:14px 0 6px"><span>구성 묶음</span></div>
+          <div class="row" style="gap:8px;flex-wrap:wrap">
+            <a class="btn sm" href="/api/bundle/export" download>내보내기</a>
+            <button class="btn sm" onclick="$('bundleFile').click()">가져오기</button>
+            <input type="file" id="bundleFile" accept="application/json,.json" style="display:none" onchange="bundleImport(this)">
+            <span style="flex:1"></span>
+            <button class="btn sm" id="sysRestartBtn" onclick="sysRestart()" style="display:none">재시작</button>
+          </div>
+          <div class="hint" style="margin-top:8px">구성 묶음은 스킬 · 사용자 정의 MCP 서버 · 루틴 · 에이전트 설정 · 대상 프로젝트를 JSON 한 파일로 옮깁니다. 계정·토큰(<code>.env</code>)은 들어가지 않습니다. 가져오기는 같은 이름을 덮어쓰고 지우지는 않습니다.</div>
+        </section>
+      </div>
+      <div class="col">
+        <section class="card">
+          <h2><span class="ic" id="icAgent"></span>에이전트 설정<span class="sp"></span><a class="more" href="/agent.html">대시보드 열기 <span id="icArrow"></span></a></h2>
+          <div class="sec" style="margin:2px 0 6px"><span>모델</span><span class="hint" id="modelHint"></span></div>
+          <div class="models">
+            <div class="mrow"><span class="ml">기획 <small>분석·설계</small></span><select class="in sel" id="designModel"></select><select class="in sel" id="designEffort"></select></div>
+            <div class="mrow"><span class="ml">개발 <small>코드 수정</small></span><select class="in sel" id="devModel"></select><select class="in sel" id="devEffort"></select></div>
+            <div class="mrow"><span class="ml">테스트 <small>독립 리뷰어</small></span><select class="in sel" id="verifyModel"></select><select class="in sel" id="verifyEffort"></select></div>
+            <div class="row" style="justify-content:space-between;align-items:center">
+              <label class="hint" style="display:flex;align-items:center;gap:6px;cursor:pointer" title="켜면 Claude 가 서브 에이전트(Agent/Task)를 병렬로 띄울 수 있습니다. 빠르지만 토큰을 몇 배로 씁니다. 끄면 도구를 금지."><input type="checkbox" id="subagentsChk" onchange="toggleSubagents(this.checked)"> 서브 에이전트 허용 <small>(토큰 多)</small></label>
+              <label class="hint" style="display:flex;align-items:center;gap:6px;cursor:pointer" title="Claude Code 실험 기능(CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS). 켜면 팀원 세션을 만들어 메시지로 협업할 수 있습니다(scheduler 마이그레이션에서 팀 15개 실측, 토큰 급증). 끄면 자식 프로세스에서 플래그를 0 으로 덮고 팀 메시지 도구를 금지. 서브 에이전트와 별개."><input type="checkbox" id="teamsChk" onchange="toggleTeams(this.checked)"> 팀 에이전트 허용 <small>(토큰 多)</small></label>
+              <button class="btn" id="modelSaveBtn" onclick="saveModels()">저장</button>
+            </div>
+          </div>
+          <div class="sec" style="margin:14px 0 6px"><span>대상 프로젝트</span><span class="n" id="projCount">0</span></div>
+          <div id="projList" class="chips" style="margin-bottom:8px"></div>
+          <div class="toolbar">
+            <div class="field has-ico"><span class="ico" id="icPlus"></span><input id="projIn" placeholder="추가: group/repo (GitLab 경로)" autocomplete="off"></div>
+            <button class="btn" id="projAddBtn" onclick="projectAdd()">추가</button>
+          </div>
+          <div class="hint">라벨 <code>ai-fix</code> 스캔과 수동 시작은 이 목록의 프로젝트에서만 됩니다. 변경은 저장 즉시 반영되며 재시작이 필요 없습니다. 빼도 진행 중인 세션은 끝까지 갑니다.</div>
+        </section>
+        <section class="card">
+          <h2><span class="ic" id="icSkill"></span>스킬<span class="sp"></span><button class="btn sm" onclick="skillEdit(null)">+ 스킬 추가</button></h2>
+          <div class="crud" id="skillList"><div class="hint">불러오는 중…</div></div>
+          <div class="frm" id="skillForm">
+            <div><label class="l">이름</label><input class="in" id="sfName" placeholder="commit-convention" autocomplete="off"></div>
+            <div><label class="l">설명 (언제 쓰는 지침인지 한 줄 — 에이전트가 이 문장을 보고 적용 여부를 정합니다)</label><input class="in" id="sfDesc" placeholder="Java 서비스 코드를 수정할 때" autocomplete="off"></div>
+            <div><label class="l">적용 단계 (모두 끄면 전 단계)</label>
+              <div class="chk" id="sfStages"></div></div>
+            <div><label class="l">본문 (지침. 1,500자 이하는 프롬프트에 그대로, 넘으면 필요할 때 파일을 읽게 합니다)</label>
+              <textarea class="in body" id="sfBody" placeholder="- 트랜잭션 경계는 서비스 메서드에 둔다&#10;- 로그는 한국어, 식별자는 영어&#10;- …"></textarea></div>
+            <div class="acts"><label class="hint" style="display:flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" id="sfEnabled" checked> 사용</label><span class="hint" id="sfChars"></span><span style="flex:1"></span>
+              <button class="btn sm" onclick="skillFormClose()">취소</button><button class="btn sm primary" onclick="skillSave()">저장</button></div>
+          </div>
+          <div class="hint" style="margin-top:8px">스킬은 이슈 에이전트와 질의의 시스템 프롬프트에 실리는 재사용 지침입니다. 저장하면 다음 실행부터 반영됩니다(재시작 불필요).</div>
+        </section>
+        <section class="card">
+          <h2><span class="ic" id="icBook"></span>사내 문서 (RAG)<span class="sp"></span><button class="btn sm" id="docRefreshBtn" onclick="refreshDocs()"><span id="icRefresh"></span>지금 재적재</button></h2>
+          <div class="stats" id="docsStat" style="margin-bottom:12px">
+            <div class="stat"><div class="l">적재 섹션</div><div class="v"><div class="skel" style="width:50%"></div></div></div>
+            <div class="stat"><div class="l">마지막 적재</div><div class="v"><div class="skel" style="width:70%"></div></div></div>
+          </div>
+          <div class="callout warn" id="docsWarn" style="display:none;margin-bottom:12px"></div>
+          <div class="toolbar">
+            <div class="field has-ico"><span class="ico" id="icSearch2"></span><input id="docQ" placeholder="검색 테스트: 예) 배포 브랜치 전략" autocomplete="off"></div>
+            <button class="btn" onclick="searchDocs()">검색</button>
+          </div>
+          <div class="hint">@AI 질문 시 관련 섹션을 찾아 근거로 답하고 출처 URL을 붙입니다. 이 검색은 점검용이며 방으로 전송되지 않습니다.</div>
+          <div class="hits" id="docHits"></div>
+        </section>
+      </div>
+      <div class="col">
+        <section class="card">
+          <h2><span class="ic" id="icMcp"></span>운영 MCP<span class="sp"></span><span class="hint" id="mcpSummary"></span></h2>
+          <div id="mcpServers"><div class="skel" style="margin:6px 0"></div></div>
+          <div class="toolbar" style="margin-top:12px">
+            <div class="field has-ico"><span class="ico" id="icSearch3"></span><input id="mcpQ" placeholder="질의 테스트: 예) k3s 노드 상태 / opensearch 클러스터 상태" autocomplete="off"></div>
+            <button class="btn" id="mcpAskBtn" onclick="mcpAsk()">조회</button>
+          </div>
+          <div class="hint">자기방에서 <b>@AI 운영 &lt;질문&gt;</b> 또는 운영 키워드(k3s, 파드, 인덱스, 쿼리 …)가 들어간 @AI 질문은 MCP 로 실제 데이터를 조회해 답합니다. 읽기 전용 도구만 허용되며 다른 방에서는 동작하지 않습니다.</div>
+          <div class="md" id="mcpAnswer" style="margin-top:10px;font-size:13.5px"></div>
+          <div class="sec" style="margin:14px 0 6px"><span>사용자 정의 MCP 서버</span><button class="btn sm" onclick="mcpEdit(null)">+ 서버 추가</button></div>
+          <div class="crud" id="mcpCustom"><div class="hint">불러오는 중…</div></div>
+          <div class="frm" id="mcpForm">
+            <div class="two">
+              <div><label class="l">이름 (도구 접두어 mcp__이름__)</label><input class="in" id="mfName" placeholder="jira" autocomplete="off"></div>
+              <div><label class="l">유형</label><select class="in" id="mfType" onchange="mcpTypeChanged()"><option value="http">http (Streamable HTTP)</option><option value="sse">sse</option><option value="stdio">stdio (로컬 프로세스)</option></select></div>
+            </div>
+            <div id="mfRemote">
+              <label class="l">URL</label><input class="in" id="mfUrl" placeholder="http://host:port/mcp" autocomplete="off">
+              <label class="l" style="margin-top:8px;display:block">헤더 (한 줄에 하나, 비밀값은 ${ENV_NAME} — 실제 값은 .env)</label>
+              <textarea class="in" id="mfHeaders" placeholder="Authorization: Bearer ${JIRA_MCP_TOKEN}"></textarea>
+            </div>
+            <div id="mfLocal" style="display:none">
+              <label class="l">실행 명령</label><input class="in" id="mfCommand" placeholder="cmd" autocomplete="off">
+              <label class="l" style="margin-top:8px;display:block">인자 (한 줄에 하나. Windows 의 npx 는 명령 cmd + /c, npx, …)</label>
+              <textarea class="in" id="mfArgs" placeholder="/c&#10;npx&#10;-y&#10;@scope/some-mcp-server"></textarea>
+            </div>
+            <div><label class="l">허용 도구 (쉼표·줄바꿈 구분. 비우면 서버의 모든 도구 허용 — 변경 도구가 있는 서버는 조회 도구만 적으세요)</label><input class="in" id="mfTools" placeholder="get_issue, search_issues" autocomplete="off"></div>
+            <div><label class="l">설명 (모델에게 주는 한 줄 안내)</label><input class="in" id="mfDesc" placeholder="Jira 이슈 조회용. 읽기 전용." autocomplete="off"></div>
+            <div class="acts"><label class="hint" style="display:flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" id="mfEnabled" checked> 사용</label><span style="flex:1"></span>
+              <button class="btn sm" onclick="mcpFormClose()">취소</button><button class="btn sm primary" onclick="mcpSave()">저장</button></div>
+          </div>
+          <div class="sec" style="margin:14px 0 6px"><span>로컬 프리뷰</span></div>
+          <div id="previewStat" class="hint">확인 중…</div>
+        </section>
+        <section class="card">
+          <h2><span class="ic" id="icPlat"></span>연동<span class="sp"></span><span class="hint" id="platSummary"></span></h2>
+          <div id="platPorts"><div class="skel" style="margin:6px 0"></div><div class="skel" style="margin:6px 0;width:70%"></div></div>
+          <div class="hint" style="margin-top:8px">메신저와 LLM 은 포트(인터페이스) 뒤의 구현체로 연결됩니다. 구현체 전환은 <code>.env</code> 의 <code>PLATFORM_*</code> 값을 바꾸고 재시작합니다. 테스트 버튼은 실제 호출로 연결을 확인합니다.</div>
+        </section>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="toasts" id="toasts"></div>
+
+<script src="/ui.js"></script>
+<script src="/admin.js"></script>
+<script>
+UI.topbar('platform', '플랫폼');
+UI.pollAgentChip();
+loadSystem(); loadDoctor(false);
+loadPlatform(); UI.every(loadPlatform, 20000);
+loadModels(); loadProjects(); loadSkills(); loadMcp(); loadMcpCustom(); loadPreview(); UI.every(loadPreview, 30000); loadDocs();
+</script>
+</body>
+</html>

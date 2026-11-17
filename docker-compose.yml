@@ -1,0 +1,35 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: dev-agent-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=dev_agent
+      - POSTGRES_USER=${DB_USERNAME}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - TZ=Asia/Seoul
+    ports:
+      - "5432:5432"            # 로컬 개발 시 호스트에서 접속 (app 로컬 실행)
+    volumes:
+      - ./pgdata:/var/lib/postgresql/data
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME} -d dev_agent"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # --- M6 운영화 단계에서 활성화 (지금은 app 을 gradlew bootRun 으로 로컬 실행) ---
+  # dev-agent:
+  #   build: .
+  #   image: dev-agent:0.1
+  #   restart: unless-stopped
+  #   env_file: .env
+  #   environment:
+  #     - TZ=Asia/Seoul
+  #     - DB_URL=jdbc:postgresql://postgres:5432/dev_agent
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #   logging:
+  #     options: { max-size: "10m", max-file: "3" }
