@@ -399,6 +399,51 @@ public class IssueAgentService {
     }
 
     /**
+     * 에이전트 화면 "이슈 목록": 대상 프로젝트의 열린 이슈(최근 갱신 순 50건)와 각 이슈의 에이전트 세션 상태.
+     * 화면이 창을 열 때만 부른다(주기 호출 없음). 반환: ok/project/label/issues 또는 ok=false/result.
+     */
+    public Map<String, Object> openIssueList(String project) {
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("ok", false);
+        if (!props.enabled()) {
+            out.put("result", "이슈 에이전트가 비활성 상태입니다 (GITLAB_ENABLED=false).");
+            return out;
+        }
+        String resolved = projectReg.resolveProject(project == null ? "" : project.strip());
+        if (resolved == null) {
+            out.put("result", "대상 프로젝트에서 '" + project + "' 를 찾지 못했습니다.");
+            return out;
+        }
+        try {
+            GitLabClient.Project p = projectReg.project(resolved);
+            List<Map<String, Object>> list = new ArrayList<>();
+            for (GitLabClient.Issue is : gitlab.recentOpenIssues(p.id(), 50)) {
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("iid", is.iid());
+                m.put("title", is.title());
+                m.put("labels", is.labels());
+                m.put("author", is.author());
+                m.put("webUrl", is.webUrl());
+                IssueSession s = sessions.findByIssue(p.path(), is.iid());
+                if (s != null) {
+                    m.put("sessionId", s.getId());
+                    m.put("state", s.getState());
+                    m.put("active", s.isActive());
+                }
+                list.add(m);
+            }
+            out.put("ok", true);
+            out.put("project", p.path());
+            out.put("label", props.label());
+            out.put("issues", list);
+        } catch (RuntimeException e) {
+            log.warn("GitLab 이슈 목록 조회 실패 project={}: {}", resolved, e.toString());
+            out.put("result", "이슈 목록 조회 실패: " + e.getMessage());
+        }
+        return out;
+    }
+
+    /**
      * 플랫폼 화면에서 GitLab 이슈를 등록한다. 대상 프로젝트에 등록된 저장소만 받는다.
      * start 면 스캔 라벨을 붙여 만들고 곧바로 큐에 넣는다(스캔 주기를 기다리지 않음). 반환: ok/result/url/ref.
      */

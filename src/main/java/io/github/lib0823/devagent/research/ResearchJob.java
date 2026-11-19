@@ -16,6 +16,9 @@ public class ResearchJob {
     public static final String FAILED = "FAILED";
     public static final String ABORTED = "ABORTED";
 
+    public static final String KIND_DOC = "doc";
+    public static final String KIND_ISSUE = "issue";
+
     private long id;
     private Long parentId;
     private long rootId;
@@ -36,6 +39,7 @@ public class ResearchJob {
     private boolean verify;           // 2차 검증(독립 검증자 → 지적 반영) 수행 여부
     private String verifyState;       // null(안 함) / PASS / FIXED(지적 반영해 수정) / FAIL(지적은 있으나 수정 실패) / SKIPPED(검증 실행 실패)
     private String verifyMd;          // 검증자 보고서
+    private String kind = KIND_DOC;   // 결과 형식: doc(조사 문서) / issue(GitLab 이슈 초안 — 화면에서 「이슈로 등록」)
     private OffsetDateTime createdAt;
     private OffsetDateTime startedAt;
     private OffsetDateTime finishedAt;
@@ -90,6 +94,9 @@ public class ResearchJob {
     public void setVerifyState(String verifyState) { this.verifyState = verifyState; }
     public String getVerifyMd() { return verifyMd; }
     public void setVerifyMd(String verifyMd) { this.verifyMd = verifyMd; }
+    public String getKind() { return kind; }
+    public void setKind(String kind) { this.kind = KIND_ISSUE.equals(kind) ? KIND_ISSUE : KIND_DOC; }
+    public boolean issueDraft() { return KIND_ISSUE.equals(kind); }
     public String getRequester() { return requester; }
     public void setRequester(String requester) { this.requester = requester; }
     public OffsetDateTime getCreatedAt() { return createdAt; }

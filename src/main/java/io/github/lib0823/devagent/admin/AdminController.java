@@ -168,6 +168,12 @@ public class AdminController {
         return Map.of("result", issueAgent.injectReply(text, sessionId, note));
     }
 
+    /** 대상 프로젝트의 열린 이슈(최근 갱신 순 50건) + 에이전트 세션 상태. 에이전트 화면 "이슈 목록" 창이 열 때만 부른다. */
+    @GetMapping("/api/issues-list")
+    public Map<String, Object> issuesList(@RequestParam String project) {
+        return issueAgent.openIssueList(project);
+    }
+
     /**
      * GitLab 이슈 등록(에이전트 화면 "새 이슈"). project 는 대상 프로젝트만. start=true 면 스캔 라벨을 붙이고 바로 큐에 넣는다.
      * GitLab 에 글을 쓰는 요청이라 다른 사이트 페이지에서 온 것은 막는다.

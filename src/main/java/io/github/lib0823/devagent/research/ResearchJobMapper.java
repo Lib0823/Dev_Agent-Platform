@@ -43,18 +43,19 @@ public interface ResearchJobMapper {
     @Update("CREATE INDEX IF NOT EXISTS idx_research_job_root ON research_job (root_id, id)")
     void ensureIndex();
 
-    /** 2차 검증 컬럼(멱등). */
+    /** 2차 검증·결과 형식 컬럼(멱등). */
     @Update("""
             ALTER TABLE research_job
                 ADD COLUMN IF NOT EXISTS verify BOOLEAN NOT NULL DEFAULT false,
                 ADD COLUMN IF NOT EXISTS verify_state VARCHAR(16),
-                ADD COLUMN IF NOT EXISTS verify_md TEXT
+                ADD COLUMN IF NOT EXISTS verify_md TEXT,
+                ADD COLUMN IF NOT EXISTS kind VARCHAR(16) NOT NULL DEFAULT 'doc'
             """)
     void ensureColumns();
 
     @Insert("""
-            INSERT INTO research_job (parent_id, root_id, question, projects, model, effort, state, claude_session_id, notify, requester, verify)
-            VALUES (#{parentId}, #{rootId}, #{question}, #{projects}, #{model}, #{effort}, #{state}, #{claudeSessionId}, #{notify}, #{requester}, #{verify})
+            INSERT INTO research_job (parent_id, root_id, question, projects, model, effort, state, claude_session_id, notify, requester, verify, kind)
+            VALUES (#{parentId}, #{rootId}, #{question}, #{projects}, #{model}, #{effort}, #{state}, #{claudeSessionId}, #{notify}, #{requester}, #{verify}, #{kind})
             """)
     @Options(useGeneratedKeys = true, keyProperty = "id", keyColumn = "id")
     int insert(ResearchJob j);
@@ -78,7 +79,7 @@ public interface ResearchJobMapper {
     /** 루트 목록(최신 순). 목록엔 결과 본문을 싣지 않는다. */
     @Select("""
             SELECT id, parent_id, root_id, question, projects, model, effort, state, claude_session_id, NULL AS result_md,
-                   last_error, turns, input_tokens, output_tokens, elapsed_ms, notify, requester, verify, verify_state, NULL AS verify_md,
+                   last_error, turns, input_tokens, output_tokens, elapsed_ms, notify, requester, verify, verify_state, NULL AS verify_md, kind,
                    created_at, started_at, finished_at, updated_at
             FROM research_job WHERE parent_id IS NULL ORDER BY id DESC LIMIT #{limit}
             """)

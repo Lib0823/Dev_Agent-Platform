@@ -2,6 +2,7 @@
 <html lang="ko" data-theme="dark">
 <head>
 <meta charset="utf-8">
+<script>try{document.documentElement.dataset.theme=localStorage.getItem('mb-theme')||(matchMedia('(prefers-color-scheme: light)').matches?'light':'dark')}catch(e){}</script>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>에이전트 · Dev Agent</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%278%27 fill=%27%236d5dfc%27/%3E%3Cpath d=%27M9 11h14M9 16h10M9 21h7%27 stroke=%27white%27 stroke-width=%272.6%27 stroke-linecap=%27round%27/%3E%3C/svg%3E">
@@ -9,20 +10,25 @@
 <link rel="stylesheet" href="/ui.css">
 <style>
   /* ---------- layout ---------- */
-  .body { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 18px; padding: 18px 22px 48px; flex: 1; }
+  .body { display: grid; grid-template-columns: var(--side-w, 340px) minmax(0, 1fr); gap: 18px; padding: 18px 22px 48px; flex: 1; }
   @media (max-width: 980px) { .body { grid-template-columns: 1fr; } .sidebar { position: static !important; max-height: none !important; } }
 
   /* ---------- sidebar ---------- */
   .sidebar { padding: 14px; position: sticky; top: 78px; max-height: calc(100vh - 96px); display: flex; flex-direction: column; gap: 12px; }
-  .cmdbox { position: relative; }
-  .cmdbox input { width: 100%; height: 40px; padding: 0 40px 0 38px; border-radius: 11px; border: 1px solid var(--line); background: var(--bg2); color: var(--text); font: inherit; outline: none; transition: border-color .15s, box-shadow .15s; }
-  .cmdbox input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
-  .cmdbox input::placeholder { color: var(--muted); }
-  .cmdbox .ico { position: absolute; left: 12px; top: 11px; color: var(--muted); }
-  .cmdbox .go { position: absolute; right: 6px; top: 6px; height: 28px; width: 28px; border-radius: 8px; border: none; background: var(--accent); color: #fff; display: grid; place-items: center; }
-  .cmdhint { font-size: 11.5px; color: var(--muted); margin-top: 6px; padding-left: 2px; }
-  .cmdbtns { display: flex; gap: 6px; margin-top: 10px; }
-  .cmdbtns .btn { flex: 1; justify-content: center; }
+  .cmdbtns { display: flex; gap: 6px; }
+  .cmdbtns .btn { flex: 1; justify-content: center; padding: 0 6px; gap: 5px; }
+  /* ---------- 이슈 목록 ---------- */
+  dialog.newissue.wide { width: min(760px, calc(100vw - 32px)); }
+  .ilhead { display: flex; gap: 8px; align-items: center; }
+  .ilhead select { flex: 1; }
+  .ilist { margin-top: 12px; max-height: min(60vh, 520px); overflow: auto; display: flex; flex-direction: column; gap: 6px; }
+  .ilist .irow { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 9px 12px; border-radius: 10px; background: var(--surface2); border: 1px solid var(--line); }
+  .ilist .irow .no { font-family: var(--mono); font-size: 12.5px; color: var(--muted); }
+  .ilist .irow .tt { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ilist .irow .tt a { color: inherit; }
+  .ilist .irow .meta { display: flex; flex-wrap: wrap; gap: 4px 6px; margin-top: 3px; font-size: 11.5px; color: var(--muted); align-items: center; }
+  .ilist .irow .lb { padding: 0 7px; border-radius: 999px; border: 1px solid var(--line); background: var(--bg2); }
+  .ilist .irow .lb.on { border-color: color-mix(in srgb, var(--accent) 55%, transparent); color: var(--text); }
   /* ---------- 새 이슈 ---------- */
   dialog.newissue { width: min(620px, calc(100vw - 32px)); padding: 20px; border-radius: 16px; border: 1px solid var(--line); background: var(--surface); color: var(--text); }
   dialog.newissue::backdrop { background: rgba(0,0,0,.45); }
@@ -32,13 +38,9 @@
   dialog.newissue .chk { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 13px; color: var(--text2); }
   dialog.newissue .btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
   .slist { overflow: auto; flex: 1; display: flex; flex-direction: column; gap: 6px; padding-right: 2px; }
-  .pfilter { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }
-  .pfilter .pf { height: 26px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface2); color: var(--text2); font-size: 12px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
-  .pfilter .pf .n { font-family: var(--mono); font-size: 11px; color: var(--muted); }
-  .pfilter .pf:hover { border-color: var(--line2); color: var(--text); }
-  .pfilter .pf.sel { border-color: color-mix(in srgb, var(--accent) 55%, transparent); color: var(--text); background: color-mix(in srgb, var(--accent) 14%, var(--surface2)); }
-  .pfilter .pf.sel .n { color: var(--text2); }
-  .sitem { position: relative; padding: 11px 12px 11px 16px; border-radius: 12px; cursor: pointer; border: 1px solid transparent; transition: background .15s, border-color .15s; }
+  .sec select.pfsel { width: auto; max-width: 62%; height: 28px; padding: 0 9px; font-size: 12px; font-weight: 600; border-radius: 8px; color: var(--text2); text-transform: none; letter-spacing: 0; text-overflow: ellipsis; }
+  .sec select.pfsel.on { border-color: color-mix(in srgb, var(--accent) 55%, transparent); color: var(--text); }
+  .sitem { position: relative; padding: 10px 12px 10px 16px; border-radius: 12px; cursor: pointer; border: 1px solid transparent; transition: background .15s, border-color .15s; }
   .sitem::before { content: ""; position: absolute; left: 6px; top: 12px; bottom: 12px; width: 3px; border-radius: 3px; background: var(--muted); opacity: .5; }
   .sitem.st-wait::before { background: var(--warn); opacity: 1; } .sitem.st-run::before { background: var(--run); opacity: 1; animation: blink 1.2s infinite; }
   .sitem.st-ok::before { background: var(--ok); opacity: .9; } .sitem.st-err::before { background: var(--err); opacity: .9; }
@@ -49,7 +51,8 @@
   .sitem .ref { font-family: var(--mono); font-size: 11.5px; color: var(--text2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .sitem .ref b { color: var(--text); font-weight: 600; }
   .sitem .title { font-size: 13px; margin-top: 4px; color: var(--text); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.4; }
-  .sitem .r3 { display: flex; gap: 10px; margin-top: 6px; font-size: 11.5px; color: var(--muted); }
+  .sitem .r3 { display: flex; margin-top: 5px; font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; }
+  .sitem .r3 span + span::before { content: "·"; margin: 0 6px; color: var(--muted); }
 
   /* ---------- main ---------- */
   .content { padding: 22px 24px 26px; min-width: 0; }
@@ -178,20 +181,13 @@
 
   <div class="body">
     <aside class="panel-card sidebar">
-      <div>
-        <div class="cmdbox">
-          <span class="ico" id="icTerm"></span>
-          <input id="cmdIn" placeholder="group/repo#12 · 이슈 URL · 스캔 · 중단" autocomplete="off">
-          <button class="go" onclick="runCmd()" title="실행" id="goBtn"></button>
-        </div>
-        <div class="cmdhint">이슈를 수동으로 시작하거나 라벨 스캔을 바로 돌립니다.</div>
-        <div class="cmdbtns">
-          <button class="btn sm" id="btnNew" onclick="openNewIssue()" title="GitLab 이슈를 여기서 등록합니다"></button>
-          <button class="btn sm" id="btnScan" onclick="scanNow()" title="라벨 이슈를 지금 바로 가져옵니다(평소에는 2분마다 자동)"></button>
-        </div>
+      <div class="cmdbtns">
+        <button class="btn sm" id="btnNew" onclick="openNewIssue()" title="GitLab 이슈를 여기서 등록합니다"></button>
+        <button class="btn sm" id="btnList" onclick="openIssueList()" title="GitLab 에 열려 있는 이슈를 보고 골라서 시작합니다(라벨이 없어도, 중단된 이슈 다시 시작도)"></button>
+        <button class="btn sm" id="btnScan" onclick="scanNow()" title="라벨 이슈를 지금 바로 가져옵니다(평소에는 2분마다 자동)"></button>
       </div>
-      <div class="sec"><span>세션</span><span class="n" id="scount">0</span></div>
-      <div class="pfilter" id="pfilter"></div>
+      <div class="sec"><span>세션<span class="n" id="scount">0</span></span>
+        <select class="in pfsel" id="pfilter" onchange="setProjFilter(this.value)" title="프로젝트로 거르기" style="display:none"></select></div>
       <div class="slist" id="slist"><div class="skel"></div><div class="skel" style="width:70%"></div><div class="skel" style="width:85%"></div></div>
       <style>
         .usage { margin-top: 14px; }
@@ -301,6 +297,15 @@
     </main>
   </div>
 </div>
+<dialog class="newissue wide" id="ilDlg">
+  <h3>이슈 목록</h3>
+  <div class="ilhead">
+    <select class="in" id="ilProj" onchange="loadIssueList()"></select>
+    <button class="btn" id="ilReload" onclick="loadIssueList()">새로고침</button>
+    <button class="btn" onclick="$('ilDlg').close()">닫기</button>
+  </div>
+  <div class="ilist" id="ilist"></div>
+</dialog>
 <dialog class="newissue" id="niDlg">
   <h3>새 이슈 등록</h3>
   <label class="l" for="niProj">프로젝트</label>
@@ -321,10 +326,12 @@
 <script>
 const { $, esc, fmt, hhmm, ago, dur, KOR, cls, isActive, I, toast } = UI;
 UI.topbar('agent', '에이전트 대시보드');
+UI.splitter('agent', 340);
+const mdc = UI.memo(t => md(t));   // 같은 마크다운을 갱신 때마다 다시 변환하지 않는다
 // 대시보드에서는 상단 칩이 현재 페이지 상태이므로 링크 대신 실시간 연결 칩을 추가
 $('strip').insertAdjacentHTML('beforeend', '<span class="chip live" id="live"><span class="dot"></span><span>연결 중</span></span>');
-$('icTerm').innerHTML = I.terminal; $('goBtn').innerHTML = I.arrow; $('icEmpty').innerHTML = I.clock.replace(/width="14" height="14"/, 'width="30" height="30"');
-$('btnNew').innerHTML = I.plus + '새 이슈'; $('btnScan').innerHTML = I.refresh + '이슈 가져오기';
+$('icEmpty').innerHTML = I.clock.replace(/width="14" height="14"/, 'width="30" height="30"');
+$('btnNew').innerHTML = I.plus + '새 이슈'; $('btnList').innerHTML = I.search + '이슈 목록'; $('btnScan').innerHTML = I.refresh + '가져오기';
 $('btnApprove').innerHTML = I.check + '진행';$('btnFb').innerHTML = I.send + '피드백 보내기 <span class="kbd">⏎</span>'; $('btnAbort').innerHTML = I.x + '중단';
 
 const STEPS = [
@@ -428,7 +435,7 @@ function renderRunner() {
   r.style.display = 'flex';
 }
 const STAGE_TAU = { ANALYZE: 6 * 60e3, FIX: 40 * 60e3, VERIFY: 8 * 60e3 };   // 통상 소요(분석 6분·개발 40분·검증 8분) — 지나면 85% 근처에서 멈춤
-setInterval(renderRunner, 1000);
+setInterval(() => { if (!UI.asleep()) renderRunner(); }, 1000);
 
 // ---------------------------------------------------------------- overview / list
 async function loadOverview() {
@@ -510,7 +517,7 @@ function renderSubagents() {
 }
 
 // 프로젝트 필터: 메신저 관리에서 등록한 대상 프로젝트 + 세션에 남아 있는 프로젝트. 선택은 브라우저에 기억.
-let projects = [], projFilter = '';
+let projects = [], projFilter = '', filterHtml = '', swapDir = 0;
 try { projFilter = localStorage.getItem('agent.projFilter') || ''; } catch(e) {}
 async function loadProjects() {
   try { const d = await (await fetch('/api/issues-projects')).json(); projects = (d.projects||[]).map(p => p.path); } catch(e) { projects = []; }
@@ -523,26 +530,34 @@ function setProjFilter(p) {
 function renderFilter() {
   const counts = {}; sessions.forEach(s => { counts[s.projectPath] = (counts[s.projectPath]||0) + 1; });
   const all = [...new Set([...projects, ...Object.keys(counts)])];
-  if (all.length < 2) { $('pfilter').innerHTML = ''; if (projFilter) projFilter = ''; return; }
+  const box = $('pfilter');
+  if (all.length < 2) { box.style.display = 'none'; if (projFilter) projFilter = ''; return; }
   if (projFilter && !all.includes(projFilter)) projFilter = '';
-  const chip = (p, label, n) => `<button class="pf ${projFilter===p?'sel':''}" onclick="setProjFilter('${esc(p)}')" title="${esc(p||'전체')}">${esc(label)}<span class="n">${n}</span></button>`;
-  $('pfilter').innerHTML = chip('', '전체', sessions.length) + all.map(p => chip(p, p.split('/').pop(), counts[p]||0)).join('');
+  const opt = (p, label, n) => `<option value="${esc(p)}" ${projFilter===p?'selected':''}>${esc(label)} (${n})</option>`;
+  const html = opt('', '전체 프로젝트', sessions.length) + all.map(p => opt(p, p.split('/').pop(), counts[p]||0)).join('');
+  if (html !== filterHtml) { filterHtml = html; box.innerHTML = html; }   // 내용이 같으면 다시 그리지 않는다(펼친 목록이 15초 갱신에 닫히지 않게)
+  box.style.display = ''; box.classList.toggle('on', !!projFilter);
 }
 function renderList() {
   const box = $('slist');
-  if (!sessions.length) { box.innerHTML='<div class="md-empty">세션이 없습니다.<br>라벨 <code>ai-fix</code> 이슈가 등록되면 자동으로 나타납니다.</div>'; return; }
+  if (!sessions.length) { UI.set(box, '<div class="md-empty">세션이 없습니다.<br>라벨 <code>ai-fix</code> 이슈가 등록되면 자동으로 나타납니다.</div>'); return; }
   const list = projFilter ? sessions.filter(s => s.projectPath === projFilter) : sessions;
-  if (!list.length) { box.innerHTML=`<div class="md-empty">${esc(projFilter.split('/').pop())} 프로젝트의 세션이 없습니다.</div>`; return; }
-  box.innerHTML = list.map(s => `
+  if (!list.length) { UI.set(box, `<div class="md-empty">${esc(projFilter.split('/').pop())} 프로젝트의 세션이 없습니다.</div>`); return; }
+  UI.set(box, list.map(s => `
     <div class="sitem st-${cls(s.state)} ${s.id===selId?'sel':''}" onclick="selectSession(${s.id})">
       <div class="r1"><span class="ref">${runningOf(s.id) ? `<i class="runmini m-${esc(runningOf(s.id).model)}" title="${esc(runningOf(s.id).model)} 실행 중"></i>` : ''}${esc(s.projectPath.split('/').pop())} <b>#${s.issueIid}</b></span><span class="badge ${cls(s.state)}">${KOR[s.state]||s.state}</span></div>
       <div class="title" title="${esc(s.issueTitle)}">${esc(s.issueTitle)||'(제목 없음)'}</div>
       <div class="r3"><span>${ago(s.updatedAt)}</span>${s.feedbackRounds?`<span>피드백 ${s.feedbackRounds}</span>`:''}${s.mrUrl?'<span>MR</span>':''}</div>
-    </div>`).join('');
+    </div>`).join(''));
 }
 
 function selectSession(id) {
-  if (selId !== id) { selId=id; sel=null; events=[]; lastEventId=0; diffLoadedFor=null; $('log').innerHTML=''; $('diff').innerHTML=''; history.replaceState(null, '', '#s='+id); }
+  if (selId !== id) {
+    // 이전 내용은 새 세션이 도착할 때까지 그대로 두고(빈 화면이 끼지 않게) 도착하면 목록에서 움직인 방향으로 밀어 넣는다
+    const from = sessions.findIndex(s => s.id === selId), to = sessions.findIndex(s => s.id === id);
+    swapDir = from >= 0 && to >= 0 && to < from ? -1 : 1; if (selId != null) UI.swapOut($('detail'));
+    selId=id; sel=null; events=[]; lastEventId=0; diffLoadedFor=null; $('diff').innerHTML=''; history.replaceState(null, '', '#s='+id);
+  }
   renderList();
   loadDetail(true);
 }
@@ -552,13 +567,14 @@ window.addEventListener('hashchange', () => { const h = hashId(); if (h != null 
 async function loadDetail(full) {
   if (selId == null) return;
   const id = selId; let d;
-  try { d = await (await fetch(`/api/agent/sessions/${id}?afterId=${full?0:lastEventId}&limit=2000`)).json(); } catch(e) { return; }
+  try { d = await (await fetch(`/api/agent/sessions/${id}?afterId=${full?0:lastEventId}&limit=2000`)).json(); } catch(e) { $('detail').classList.remove('swap-out'); return; }
   if (id !== selId) return;                       // 응답 대기 중 다른 세션을 선택함 → 이 응답은 버린다
   if (!d.session) { selId = null; sel = null; $('detail').style.display='none'; $('noSel').style.display='flex'; renderList(); return; }
   sel = d.session;
   if (full) events = d.events || []; else (d.events||[]).forEach(e => { if (!events.some(x=>x.id===e.id)) events.push(e); });
   if (events.length) lastEventId = Math.max(lastEventId, ...events.map(e=>e.id));
   renderDetail(); renderLog(); renderTimeline();
+  if (swapDir) { UI.swapIn($('detail'), swapDir); swapDir = 0; }
   if (currentPane()==='diff') loadDiff();
 }
 function currentPane(){ const t=document.querySelector('.tabs .tab.sel'); return t?t.dataset.p:'log'; }
@@ -575,7 +591,7 @@ function renderDetail() {
   if (!s.branchName && s.workType && s.workId) links.push(`<span class="lbtn" title="컨벤션 브랜치 계획: {유형}/{일감번호} ← 기준 브랜치">${I.branch}<code>${esc(s.workType)}/${esc(s.workId)}</code>${s.baseBranch?` ← ${esc(s.baseBranch)}`:''}</span>`);
   if (s.mrUrl) links.push(`<a class="lbtn" href="${esc(s.mrUrl)}" target="_blank">${I.ext}Merge Request</a>`);
   if (s.commitSha) links.push(`<span class="lbtn">커밋 <code>${esc(s.commitSha)}</code></span>`);
-  $('dLinks').innerHTML = links.join('');
+  UI.set($('dLinks'), links.join(''));
 
   const claude = events.filter(e=>e.kind==='CLAUDE' && (e.message||'').startsWith('■'));
   // 구독제라 비용 대신 토큰: 완료 이벤트의 "토큰 in=N out=M" 합산 (예전 이벤트의 "$0.33" 형식은 무시)
@@ -584,18 +600,18 @@ function renderDetail() {
   const tools = events.filter(e=>e.kind==='TOOL').length;
   const first = events.length ? new Date(events[0].createdAt).getTime() : new Date(s.createdAt).getTime();
   const last = isActive(s.state) ? Date.now() : new Date(s.updatedAt).getTime();
-  $('dStats').innerHTML =
+  UI.set($('dStats'),
     stat('경과', dur(last-first)) + stat('피드백', s.feedbackRounds, '회') + stat('Claude 실행', claude.length, '회')
-    + stat('도구 호출', tools, '회') + stat('토큰', (tok.in||tok.out) ? `↑${kfmt(tok.in)} ↓${kfmt(tok.out)}` : '—', '', '입력(캐시 포함) ↑ · 출력 ↓') + stat('시작', fmt(s.createdAt));
+    + stat('도구 호출', tools, '회') + stat('토큰', (tok.in||tok.out) ? `↑${kfmt(tok.in)} ↓${kfmt(tok.out)}` : '—', '', '입력(캐시 포함) ↑ · 출력 ↓') + stat('시작', fmt(s.createdAt)));
   renderSteps();
   const eb = $('dErr');
   if (s.lastError && (s.state==='FAILED'||s.state==='ABORTED')) { eb.style.display='flex'; eb.innerHTML = `<span class="ic">${I.warn}</span><span>${esc(s.lastError)}</span>`; } else eb.style.display='none';
   renderActions(); renderRunner();
-  $('design').innerHTML = s.designText ? md(s.designText) : '<div class="md-empty">아직 설계안이 없습니다. 분석이 끝나면 여기에 표시됩니다.</div>';
-  $('summary').innerHTML = s.changeSummary ? md(s.changeSummary) : '<div class="md-empty">아직 변경 요약이 없습니다. 코드 수정이 끝나면 표시됩니다.</div>';
-  $('verify').innerHTML = s.verifyResult ? md(s.verifyResult)
+  UI.set($('design'), s.designText ? mdc(s.designText) : '<div class="md-empty">아직 설계안이 없습니다. 분석이 끝나면 여기에 표시됩니다.</div>');
+  UI.set($('summary'), s.changeSummary ? mdc(s.changeSummary) : '<div class="md-empty">아직 변경 요약이 없습니다. 코드 수정이 끝나면 표시됩니다.</div>');
+  UI.set($('verify'), s.verifyResult ? mdc(s.verifyResult)
     : s.state === 'VERIFYING' ? '<div class="md-empty">검증 중입니다 — 봇이 빌드·정적검사를 돌리고 독립 리뷰어가 확인합니다. 활동 로그에서 진행을 볼 수 있습니다.</div>'
-    : '<div class="md-empty">아직 검증 결과가 없습니다. 코드 수정이 끝나면 봇 검사(빌드·JS/JSP 문법)와 독립 리뷰어 판정이 여기 표시됩니다.</div>';
+    : '<div class="md-empty">아직 검증 결과가 없습니다. 코드 수정이 끝나면 봇 검사(빌드·JS/JSP 문법)와 독립 리뷰어 판정이 여기 표시됩니다.</div>');
   const cv = $('cntVerify'); if (cv) { cv.style.display = s.verifyRounds ? '' : 'none'; cv.textContent = s.verifyRounds ? (s.verifyRounds + '회') : ''; }
   renderSubagents();
   loadShots();
@@ -637,7 +653,7 @@ function renderSteps() {
     return `<div class="${c}"${tt}><div class="node">${mark}</div><div class="nm">${x.n}</div><div class="du">${spent[x.k]?dur(spent[x.k]):''}</div></div>`;
   }).join('');
   const segs = STEPS.length-1; const prog = s.state==='DONE' ? segs : Math.max(0, Math.min(segs, (terminal ? (failAt?ORDER[failAt]-1:0) : cur-1)));
-  $('steps').innerHTML = `<div class="bar" style="width:calc((100% - 100% / ${STEPS.length}) * ${prog/segs})"></div>` + html;
+  UI.set($('steps'), `<div class="bar" style="width:calc((100% - 100% / ${STEPS.length}) * ${prog/segs})"></div>` + html);
 }
 
 function renderActions() {
@@ -713,13 +729,44 @@ async function abortSession() {
   const r = await (await fetch(`/api/agent/sessions/${sel.id}/abort`, {method:'POST'})).json();
   toast(r.result); setTimeout(loadOverview, 700);
 }
-async function runCmd() {
-  const t = $('cmdIn').value.trim(); if (!t) return;
-  try { const r = await (await fetch('/api/issues-command?cmd='+encodeURIComponent(t), {method:'POST'})).json(); toast((r.result||'').split('\n')[0]); }
-  catch(e) { toast('실행 실패', 'err'); }
-  $('cmdIn').value=''; setTimeout(loadOverview, 900);
+// 이슈 목록: 창을 열거나 프로젝트를 바꿀 때만 GitLab 을 조회한다(주기 갱신 없음). 골라서 시작/다시 시작은 「@AI 이슈 group/repo#n」 과 같은 경로.
+let ilData = null;
+function openIssueList() {
+  if (!projects.length) { toast('대상 프로젝트가 없습니다. 플랫폼 탭에서 먼저 등록해 주세요.', 'err'); return; }
+  const cur = $('ilProj').value || projFilter;
+  $('ilProj').innerHTML = projects.map(p => `<option value="${esc(p)}" ${p===cur?'selected':''}>${esc(p)}</option>`).join('');
+  $('ilDlg').showModal(); loadIssueList();
 }
-$('cmdIn').addEventListener('keydown', e => { if (e.key==='Enter') runCmd(); });
+async function loadIssueList() {
+  const box = $('ilist'); box.innerHTML = '<div class="skel"></div><div class="skel" style="width:70%"></div>';
+  let d; try { d = await (await fetch('/api/issues-list?project='+encodeURIComponent($('ilProj').value))).json(); }
+  catch(e) { box.innerHTML = `<div class="md-empty">목록을 가져오지 못했습니다: ${esc(String(e))}</div>`; return; }
+  if (!d.ok) { box.innerHTML = `<div class="md-empty">${esc(d.result||'목록을 가져오지 못했습니다.')}</div>`; return; }
+  ilData = d;
+  if (!d.issues.length) { box.innerHTML = '<div class="md-empty">열린 이슈가 없습니다.</div>'; return; }
+  box.innerHTML = d.issues.map((it, i) => {
+    const st = it.state ? `<span class="badge ${cls(it.state)}">${KOR[it.state]||it.state}</span>` : '';
+    // 완료(DONE)는 다시 시작을 두지 않는다: 올라간 브랜치·MR 과 겹치는 두 번째 MR 이 생긴다 → 미흡하면 새 이슈로
+    const act = it.active || it.state === 'DONE' ? `<button class="btn sm" onclick="gotoIssue(${it.sessionId})">보기</button>`
+      : `<button class="btn sm ${it.state?'':'primary'}" onclick="startIssue(${i}, this)">${it.state?'다시 시작':'시작'}</button>`;
+    return `<div class="irow">
+      <span class="no">#${it.iid}</span>
+      <div style="min-width:0"><div class="tt" title="${esc(it.title)}"><a href="${esc(it.webUrl)}" target="_blank" rel="noopener">${esc(it.title)||'(제목 없음)'}</a></div>
+        <div class="meta">${st}${(it.labels||[]).map(l => `<span class="lb ${l===d.label?'on':''}">${esc(l)}</span>`).join('')}<span>${esc(it.author||'')}</span></div></div>
+      ${act}</div>`;
+  }).join('');
+}
+function gotoIssue(id) { $('ilDlg').close(); selectSession(id); }
+async function startIssue(i, btn) {
+  const it = ilData.issues[i], ref = ilData.project + '#' + it.iid;
+  if (it.state && !confirm(`${ref} 를 처음부터 다시 시작할까요?\n이전 세션의 설계·활동 기록은 지워집니다.`)) return;
+  btn.disabled = true;
+  try {
+    const r = await (await fetch('/api/issues-command?cmd='+encodeURIComponent(ref), {method:'POST'})).json();
+    const msg = (r.result||'').split('\n')[0]; toast(msg, /큐에 넣었습니다/.test(msg)?'ok':'err');
+  } catch(e) { toast('시작 실패: '+e, 'err'); }
+  setTimeout(() => { loadOverview(); loadIssueList(); }, 700);
+}
 $('fbIn').addEventListener('keydown', e => { if (e.key==='Enter' && !e.shiftKey) { e.preventDefault(); sendFeedback(); } });
 
 // ---------------------------------------------------------------- activity log
@@ -847,7 +894,7 @@ function connect() {
 
 loadOverview(); loadProjects(); connect();
 UI.every(loadOverview, 15000);
-setInterval(() => { if (sel && isActive(sel.state)) { renderSteps(); renderList(); } }, 5000);
+setInterval(() => { if (!UI.asleep() && sel && isActive(sel.state)) { renderSteps(); renderList(); } }, 5000);
 </script>
 </body>
 </html>

@@ -154,7 +154,7 @@ async function mcpDelete(name) {
 }
 
 // ---------------------------------------------------------------- 스킬 (등록·수정·삭제)
-const STAGE_KO2 = { analyze: '분석·설계', fix: '코드 수정', verify: '검증', research: '질의' };
+const STAGE_KO2 = { analyze: '분석·설계', fix: '코드 수정', verify: '검증', research: '리서치' };
 let skillList = [], skillStages = ['analyze', 'fix', 'verify', 'research'];
 async function loadSkills() {
   let d; try { d = await (await fetch('/api/skills')).json(); } catch (e) { $('skillList').innerHTML = '<div class="hint">조회 실패</div>'; return; }
@@ -277,7 +277,7 @@ async function sysRestart() {
   if (!r.ok) return;
   const t0 = Date.now();
   const wait = setInterval(async () => {
-    try { const x = await (await fetch('/api/system/status')).json(); if (x.uptimeSec < 60 && Date.now() - t0 > 3000) { clearInterval(wait); location.reload(); } } catch (e) { /* 내려가 있는 동안 */ }
+    try { const x = await (await fetch('/api/system/status')).json(); if (x.uptimeSec < 60 && Date.now() - t0 > 3000) { clearInterval(wait); window.top.location.reload(); } } catch (e) { /* 내려가 있는 동안 */ }
     if (Date.now() - t0 > 120000) { clearInterval(wait); toast('다시 연결되지 않습니다. 로그를 확인하세요.', 'err'); }
   }, 1500);
 }

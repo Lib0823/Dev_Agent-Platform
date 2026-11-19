@@ -104,6 +104,19 @@ public class GitLabClient {
         return out;
     }
 
+    /** 열린 이슈 최근 갱신 순(라벨 무관, 최대 limit≤100건) — 에이전트 화면 "이슈 목록"용. */
+    public List<Issue> recentOpenIssues(long projectId, int limit) {
+        JsonNode arr = rest.get().uri(b -> b.path("/projects/{p}/issues").queryParam("state", "opened")
+                .queryParam("order_by", "updated_at").queryParam("sort", "desc")
+                .queryParam("per_page", Math.max(1, Math.min(limit, 100))).build(projectId))
+                .retrieve().body(JsonNode.class);
+        List<Issue> out = new ArrayList<>();
+        if (arr != null && arr.isArray()) {
+            arr.forEach(n -> out.add(toIssue(n)));
+        }
+        return out;
+    }
+
     public Issue issue(long projectId, long iid) {
         JsonNode n = rest.get().uri("/projects/{p}/issues/{i}", projectId, iid).retrieve().body(JsonNode.class);
         if (n == null || !n.hasNonNull("iid")) {

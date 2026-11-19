@@ -142,6 +142,12 @@ public class ResearchService {
     /** @param verify 2차 검증 여부. null 이면 새 질의는 설정 기본값(research.verify), 후속 질문은 첫 질문의 값을 따른다. */
     public ResearchJob submit(String question, List<String> projects, String model, String effort, Long parentId, boolean notify, String requester,
                               Boolean verify) {
+        return submit(question, projects, model, effort, parentId, notify, requester, verify, null);
+    }
+
+    /** @param kind 결과 형식({@link ResearchJob#KIND_ISSUE} 면 이슈 초안). 항목마다 따로이며 후속 질문이 물려받지 않는다. */
+    public ResearchJob submit(String question, List<String> projects, String model, String effort, Long parentId, boolean notify, String requester,
+                              Boolean verify, String kind) {
         if (!enabled()) {
             throw new IllegalArgumentException("질의 워크플로우가 비활성 상태입니다(research.enabled / gitlab.enabled).");
         }
@@ -157,6 +163,7 @@ public class ResearchService {
         j.setState(ResearchJob.NEW);
         j.setNotify(notify);
         j.setRequester(requester);
+        j.setKind(kind);
         if (parentId != null) {
             ResearchJob parent = jobs.find(parentId);
             if (parent == null) {
@@ -194,7 +201,7 @@ public class ResearchService {
             jobs.fixRoot(j.getId());
             j.setRootId(j.getId());
         }
-        events.emit(eventId(j.getId()), IssueEvent.STATE, (parentId == null ? "질의 접수" : "후속 질문 접수") + " → NEW", ResearchJob.NEW);
+        events.emit(eventId(j.getId()), IssueEvent.STATE, (parentId == null ? "리서치 접수" : "후속 질문 접수") + " → NEW", ResearchJob.NEW);
         events.emit(eventId(j.getId()), IssueEvent.INFO, "질문: " + abbreviate(q, 300), q);
         log.info("질의 접수 #{} root={} projects={} model={}/{} by={}", j.getId(), j.getRootId(), j.getProjects(), j.getModel(), j.getEffort(), requester);
         kick();
@@ -382,7 +389,8 @@ public class ResearchService {
             }
             Path cwd = refs.get(0).dir();
             String sys = systemPrompt(refs);
-            String prompt = resume ? followupPrompt(j.getQuestion()) : firstPrompt(j.getQuestion());
+            String prompt = j.issueDraft() ? ResearchPrompts.issueDraftPrompt(j.getQuestion(), resume)
+                    : resume ? followupPrompt(j.getQuestion()) : firstPrompt(j.getQuestion());
             CodingAgent.Overrides ov = new CodingAgent.Overrides(j.getModel(), j.getEffort(), props.timeoutOr(), props.maxTurnsOr(), "research");
             events.emit(eid, IssueEvent.CLAUDE, "▶ 질의 " + (resume ? "이어서 " : "") + "시작 (" + j.getModel() + "/" + j.getEffort() + ", 상한 "
                     + props.timeoutOr() / 60_000 + "분/" + props.maxTurnsOr() + "턴)", prompt);
@@ -476,7 +484,7 @@ public class ResearchService {
             problems = v.text();
         }
         try {
-            String rprompt = ResearchPrompts.revisePrompt(problems);
+            String rprompt = j.issueDraft() ? ResearchPrompts.reviseIssuePrompt(problems) : ResearchPrompts.revisePrompt(problems);
             events.emit(eid, IssueEvent.CLAUDE, "▶ 검증 지적 반영 시작 (" + j.getModel() + "/" + j.getEffort() + ", 작성 세션 이어서)", rprompt);
             CodingAgent.Result r2 = agent.run(cwd, sid, true, gitlabProps.agent().analyzeTools(), sys, rprompt, listener, null,
                     CodingAgent.Stage.ANALYZE, false, ov);
@@ -525,7 +533,7 @@ public class ResearchService {
         events.emit(eid, IssueEvent.STATE, "RUNNING → " + state, state);
         boolean done = ResearchJob.DONE.equals(state);
         notifications.add("research", done ? "ok" : "ABORTED".equals(state) ? "warn" : "err",
-                "질의 #" + j.getId() + " " + (done ? "완료" : "ABORTED".equals(state) ? "중단" : "실패") + ": " + abbreviate(j.getQuestion(), 80),
+                "리서치 #" + j.getId() + " " + (done ? "완료" : "ABORTED".equals(state) ? "중단" : "실패") + ": " + abbreviate(j.getQuestion(), 80),
                 error, "/research.html#r=" + j.getRootId());
         if (j.isNotify()) {
             notifySelf(j);
@@ -607,6 +615,7 @@ public class ResearchService {
             m.put("followups", s != null ? s.getFollowups() : 0);
             m.put("verify", r.isVerify());
             m.put("verifyState", r.getVerifyState());
+            m.put("kind", r.getKind());
             m.put("requester", r.getRequester());
             m.put("createdAt", r.getCreatedAt());
             m.put("updatedAt", s != null && s.getUpdatedAt() != null ? s.getUpdatedAt() : r.getUpdatedAt());

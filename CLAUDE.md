@@ -9,9 +9,9 @@
 |---|---|---|
 | 메신저 봇 | `collect/ mention/ summarize/ llm/ docs/` | 방 메시지 수집, `@AI` 명령·멘션 초안, 요약, 사내 문서 RAG |
 | 이슈 에이전트 | `gitlab/` | 라벨(`ai-fix`) 이슈를 분석→설계 확인→수정→검증(봇 검사+독립 리뷰, 자동 재수정)→리뷰 확인→컨벤션 브랜치(`fix/123456`) 푸시→Draft MR(→develop). 자기방 대화형 확인 |
-| 질의(리서치) | `research/`, `static/research.html`, `admin/ResearchController` | 「질의」 탭/`@AI 질문 batch: …`: 대상 프로젝트 읽기 전용 worktree 에서 소스를 훑어 마크다운 문서로 답(수정·빌드 없음). 후속 질문은 같은 세션 `--resume`. 이슈 워커와 분리된 단일 워커 |
+| 질의(리서치) | `research/`, `static/research.html`, `admin/ResearchController` | 「리서치」 탭/`@AI 질문 batch: …`: 대상 프로젝트 읽기 전용 worktree 에서 소스를 훑어 마크다운 문서로 답(수정·빌드 없음). 후속 질문은 같은 세션 `--resume`. 이슈 워커와 분리된 단일 워커 |
 | 에이전트 대시보드 | `static/agent.html`, `admin/AgentMonitorController` | 스테퍼·실시간 활동 로그(SSE)·설계안/변경요약·diff·스크린샷·진행/중단/피드백 |
-| 루틴(예약 질의) | `routine/`, `admin/RoutineController` | 요일·시각마다 같은 질문을 질의 워크플로우에 접수(1분 틱). 질의 탭 "예약" · 루틴 목록 |
+| 루틴(예약 질의) | `routine/`, `admin/RoutineController` | 요일·시각마다 같은 질문을 질의 워크플로우에 접수(1분 틱). 리서치 탭 "예약" · 루틴 목록 |
 | 기동·배포 | `boot/`, `gradle/dist.gradle`, `admin/SystemController`, `ops/Doctor` | `.env` 틀·메신저 없음 모드·내장 DB(`Bootstrap`/`EmbeddedDb`), 실행 파일 모드 감시자+트레이(`Launcher`), 설치 점검·재시작·구성 묶음 |
 | 알림함 | `notify/`, `admin/NotificationController`, `ui.js` | 상단 종 버튼(Alt+N): 화면 토스트 기록(localStorage) + 플랫폼 알림(이슈·질의·시스템, `notification` 테이블)을 합쳐 보여 준다. 메신저와 독립 |
 | 운영 MCP | `mcp/` | opensearch/postgres/k3s-ops 읽기 전용 도구를 Claude CLI 에 `--mcp-config` 로 제공. 자기방 `@AI 운영 …` 질의, 에이전트 분석/수정에 활용 |
@@ -26,7 +26,7 @@ LLM 호출은 전부 **Claude Code CLI(headless)** 다. 채팅은 warm stream-js
 - Windows 에서 소스로 돌릴 때는 작업 스케줄러 작업 `dev-agent`(`install-autostart.ps1`)가 `run.cmd`(감시 루프)로 띄운다. **java 를 직접 죽이지 말 것** — `stop.cmd` / `restart.cmd` 사용. PowerShell 에서 `& ".\restart.cmd"`.
 - 빌드: JDK 17 로 `.\gradlew.bat test bootJar`. 산출물 `build/libs/dev-agent.jar`. `run.cmd` 는 기동 때마다 이것을 `run/dev-agent.jar` 로 복사해 실행하므로 **봇이 도는 중에 빌드해도 안전**하다(이전엔 jar 를 덮어써 실행 중인 JVM 이 NoClassDefFoundError 로 망가진 적 있음). 새 빌드는 재시작해야 반영된다.
 - **재시작은 이슈 세션이 대기 상태(DESIGN_WAIT/REVIEW_WAIT)일 때만.** 작업 중(ANALYZING/FIXING/VERIFYING/PUSHING) 재시작하면 그 세션은 FAILED 처리된다. 확인: `GET http://localhost:8777/api/issues`.
-- 화면(**Dev Agent**): `http://localhost:8777/` → 홈 `/home.html`(Alt+1, 전체 현황) · 에이전트 `/agent.html`(Alt+2) · 질의 `/research.html`(Alt+3) · 메신저 `/messenger.html`(Alt+4, 방 설정·최근 활동) · 플랫폼 `/platform.html`(Alt+5, 연동·에이전트 설정·스킬·MCP·RAG). 예전 `/index.html`·`/admin.html` 은 메신저로 리다이렉트(`admin/WebConfig`). 홈·메신저·플랫폼은 `static/admin.js`·`admin.css` 를 함께 쓰고 각 HTML 이 필요한 `load*()` 만 부른다 — **admin.js 최상위에서 요소에 이벤트를 걸 때는 `on(id, ev, fn)`**(요소가 없는 화면에서 예외가 나면 그 화면 전체가 멈춘다). 전부 localhost 전용.
+- 화면(**Dev Agent**): `http://localhost:8777/` → 홈 `/home.html`(Alt+1, 전체 현황) · 에이전트 `/agent.html`(Alt+2) · 질의 `/research.html`(Alt+3, 탭 이름 「리서치」) · 메신저 `/messenger.html`(Alt+4, 방 설정·최근 활동) · 플랫폼 `/platform.html`(Alt+5, 연동·에이전트 설정·스킬·MCP·RAG). 예전 `/index.html`·`/admin.html` 은 메신저로 리다이렉트(`admin/WebConfig`). 홈·메신저·플랫폼은 `static/admin.js`·`admin.css` 를 함께 쓰고 각 HTML 이 필요한 `load*()` 만 부른다 — **admin.js 최상위에서 요소에 이벤트를 걸 때는 `on(id, ev, fn)`**(요소가 없는 화면에서 예외가 나면 그 화면 전체가 멈춘다). 전부 localhost 전용.
 - 설정은 `application.yml`(기본값) + `.env`(비밀값, git 제외). 예시는 `.env.example`. **토큰/비밀번호는 절대 커밋하지 않는다.**
 - 로그: `logs/dev-agent.log`. DocIngest DEBUG 가 시끄러우니 grep 시 제외.
 
@@ -66,6 +66,9 @@ LLM 호출은 전부 **Claude Code CLI(headless)** 다. 채팅은 warm stream-js
 - 질의 워크플로우(`research/ResearchService`): `research_job`(루트+후속, `root_id`), 저장소는 `GitRunner.prepareReference` 의 detached worktree(기본 브랜치) 재사용, 도구는 `agent.analyze-tools`(+문서 curl·MCP), 실행은 `CodingAgent.run(…, Overrides(model, effort, timeout, maxTurns, source="research"))`. 이벤트는 `IssueEventBus` 공유(세션 id = `EVENT_BASE(10억)` + 질의 id, 대시보드 SSE 동일). 한도(`UsageLimitException`) 면 NEW 로 되돌려 60초 틱에서 재시작. 재기동 시 RUNNING 은 FAILED. 메신저 접수(`notify`)는 완료 시 자기방 `[질의]` 알림(이 접두어도 수집 제외). 설정 `research.*`(`ResearchProperties`). MyBatis `<script>` 안에서는 `<>` 대신 `!=`(XML 파싱 오류로 기동 실패 실측).
 - 질의 브랜치 선택: `research_job.projects` 항목은 `group/repo` 또는 `group/repo@branch`(첫 `@` 기준, `ResearchService.splitEntry`). 접수 때 `normalizeProjects` 가 브랜치 존재를 확인하고 기본 브랜치는 표기를 생략한다. 같은 프로젝트의 다른 브랜치를 함께 넣을 수 있다(worktree 가 브랜치별 `work/<grp__repo>__ref/<branch>`). 화면은 `GET /api/research/branches?project=`(기본 브랜치 + 최근 갱신 순 100개)로 선택지를 채운다. 화면에서 프로젝트 항목을 표시할 때 `/` 로 자르면 브랜치의 `/` 때문에 깨지니 `shortEntry` 를 쓴다.
 - 질의 2차 검증(`ResearchService.verifyAndRevise`, 기본 켜짐 `research.verify`, 질의마다 `verify` 파라미터): 독립 검증자(새 세션, 테스트 모델, `ResearchPrompts.verifierPrompt`)가 수치 재계산·누락/과잉·근거 표본 확인 후 `## 판정 PASS|FAIL`(`VerifyService.parseVerdict` 재사용). FAIL 이면 `## 문제` 를 작성 세션(`--resume`)에 돌려 1회 수정. 결과 `verify_state`(PASS/FIXED/FAIL/SKIPPED)·`verify_md`. 검증 실행이 실패해도 원 문서는 살린다.
+- 질의 이슈 초안(1.4.0): `research_job.kind`(`doc` 기본 / `issue`, 항목마다 따로 — 후속 질문이 물려받지 않음). `issue` 면 `ResearchPrompts.issueDraftPrompt` 가 출력 틀만 이슈 본문(`# 제목` + 배경/현재 동작/요구 사항/수정 방향/확인 방법/참고)으로 바꾸고, 검증 지적 반영은 `reviseIssuePrompt`(본문에 검증 메모가 섞이지 않게). 화면 「이슈로 등록」은 첫 `# ` 줄을 제목으로 잘라 `/api/issues-create` 로 보낸다 — **자동 등록은 하지 않는다**(사람이 확인). 등록 여부는 서버가 모른다(localStorage `research.issued`). 루틴·메신저 접수는 `doc` 고정.
+- 대시보드 「진행」+ 입력칸 글(1.2.0): `/api/issues-reply` 의 `note` → `handleReply(…, note)`. DESIGN_WAIT 는 `fix(s, null, note)`(수정 프롬프트에 추가 지시로 덧붙임), REVIEW_WAIT 는 **푸시하지 않고** `fix(s, note)`(반영 안 된 요청을 둔 채 올리지 않기 위해). 자기방 「진행」은 코멘트를 받지 않는다.
+- 화면에서 이슈 등록(1.2.0): `POST /api/issues-create`(Origin 확인) → `IssueAgentService.createIssue` → `GitLabClient.createIssue`. 대상 프로젝트만 받고, `start=true` 면 스캔 라벨을 붙여 만든 뒤 `startManual` 로 바로 큐에 넣는다. 에이전트 화면 「가져오기」는 `/api/issues-command?cmd=스캔`. 왼쪽 위 명령 입력창은 없앴다(1.3.0) — 대신 「이슈 목록」(`GET /api/issues-list?project=` → `openIssueList`, 열린 이슈 50건 + 세션 상태, 창을 열 때만 조회)에서 골라 `issues-command?cmd=group/repo#n` 으로 시작·다시 시작한다. 닫힌 이슈 재실행은 자기방 `@AI 이슈 repo#n` 으로만.
 - 지식 검색은 포트 `docs/KnowledgeSource`(`platform.knowledge`, 현재 `mkdocs-keyword`=`DocRetrievalService`). 코어는 `DocRetrievalService` 를 직접 참조하지 않는다. 벡터 RAG 는 이 포트의 새 어댑터로(지침은 인터페이스 주석·README).
 - 사용자 정의 MCP 서버: `mcp_server` 테이블 + `McpConfigService.saveCustom/deleteCustom/rebuild()`(설정 파일·허용 도구 재생성, `sessionConfigs` 캐시 비움, 재시작 불필요). 내장 이름(`RESERVED`)은 금지. **비밀값 저장 금지** — 인증·토큰·키류 헤더는 `${ENV}` 자리표시자만 통과(`validate`), 값은 `Environment`(.env)에서 읽어 자식 env 로만 전달(`env()`). API `/api/mcp-servers`(GET/POST), `/api/mcp-servers/delete`.
 - 플랫폼 스킬: `skill/SkillService`(`agent_skill` 테이블, `work/skills/<name>/SKILL.md` 동기화). `promptNote(stageKey)`(analyze|fix|verify|research)를 코딩 에이전트 구현체가 시스템 프롬프트에 덧붙인다(`ClaudeCliAgent.runOnce`; 새 `CodingAgent` 구현체도 같은 호출 필요). 본문 1,500자 이하는 인라인, 초과는 파일 참조, 인라인 합계 6,000자 상한(시스템 프롬프트가 명령행 인자라 Windows 32K 제한). API `/api/skills`(GET/POST), `/api/skills/delete`. Claude Code 네이티브 스킬은 쓰지 않는다(`--disable-slash-commands` + 구현체 종속).
@@ -95,6 +98,9 @@ LLM 호출은 전부 **Claude Code CLI(headless)** 다. 채팅은 warm stream-js
 - DB 스키마 변경은 매퍼의 `ensureTable()`(멱등) 과 `db/schema.sql` 둘 다.
 - 단위 테스트: `src/test/java` (JUnit 5, Spring 컨텍스트 없이 순수 단위). `gradlew test` 로 전부 통과시킨 뒤 jar 빌드.
 - 프런트는 `static/ui.css`·`ui.js`(공통 디자인 시스템)를 쓰고, 수정 후 `node --check` 로 스크립트 문법을 확인한다.
+- 탭 전환 셸(1.7.0, `ui.js` "탭 전환(셸)"): 다섯 화면은 별도 문서지만 탭 이동 때 새로 읽지 않는다 — 처음 연 화면이 바탕 문서, 나머지는 화면 전체를 덮는 `iframe.tabframe` 으로 한 번 띄운 뒤 보이기/숨기기만. 그래서 ① 화면 코드에서 탭 사이 이동은 `<a href="/x.html#…">`(자동 가로챔) 또는 `UI.nav(url)` 로 — `location.href` 로 옮기면 iframe 안에서만 이동한다. ② 주기 작업은 `UI.every` 또는 `UI.asleep()` 확인(가려진 탭은 쉰다, `document.hidden` 만 보면 안 됨). ③ 전체 새로고침은 `window.top.location.reload()`. ④ 한 창에 같은 `ui.js` 가 문서마다 따로 돈다(상단바도 문서마다 하나 — 테마는 `storage` 이벤트로 맞춘다). 화면 확인은 `~/AppData/Local/npm-cache/_npx/*/node_modules/playwright` + `ms-playwright/chromium-*/chrome.exe`(executablePath 지정) 헤드리스 스크립트로 가능(실측).
+- 다시 그리기: 주기 갱신으로 그리는 목록·문서는 `UI.set(el, html)`(내용이 같으면 건너뜀), 마크다운은 `UI.memo(md)`. 세션·스레드 전환은 `UI.swapOut/swapIn`.
+- 사이드바 폭 조절(1.5.0): `UI.splitter(key, 기본폭)` 이 `.body` 에 손잡이를 넣고 `--side-w` 를 바꾼다(localStorage `da-side-<key>`, 더블클릭 = 기본). 손잡이 위치(`ui.css .splitter`)는 `.body` 의 padding 22px·gap 18px 을 전제로 하니 그 값을 바꾸면 같이 고친다. 리서치 탭의 접기 상태는 `research.fold.*`.
 
 ## 이 환경에서 확인된 함정 (다시 겪지 말 것)
 

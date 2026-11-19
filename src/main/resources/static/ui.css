@@ -43,20 +43,22 @@ code, kbd { font-family: var(--mono); }
 
 /* ---------- top bar + nav ---------- */
 .top { display: flex; align-items: center; gap: 18px; padding: 10px 22px; position: sticky; top: 0; z-index: 20;
-       background: color-mix(in srgb, var(--bg) 78%, transparent); backdrop-filter: blur(14px); border-bottom: 1px solid var(--line); min-height: 60px; }
+       background: color-mix(in srgb, var(--bg) 96%, transparent); border-bottom: 1px solid var(--line); min-height: 60px; }
 .brand { display: flex; align-items: center; gap: 12px; text-decoration: none !important; color: inherit; }
 .logo { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; color: #fff; flex: none;
         background: linear-gradient(135deg, var(--accent), var(--accent2)); box-shadow: 0 6px 18px -6px rgba(124,127,245,.7); }
 .brand .t { font-weight: 700; font-size: 15px; letter-spacing: -.02em; white-space: nowrap; }
 .brand .s { font-size: 12px; color: var(--muted); margin-top: -2px; white-space: nowrap; }
 .nav { display: inline-flex; gap: 2px; padding: 3px; border-radius: 11px; background: var(--surface2); border: 1px solid var(--line); }
-.nav a { height: 32px; padding: 0 13px; border-radius: 8px; color: var(--text2); font-size: 13px; font-weight: 500; display: inline-flex; align-items: center; gap: 7px; text-decoration: none !important; transition: background .15s, color .15s; }
-.nav a:hover { color: var(--text); }
-.nav a.on { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.25); }
+.nav a { height: 32px; padding: 0 18px; border-radius: 8px; color: var(--text2); font-size: 13px; font-weight: 500; display: inline-flex; align-items: center; gap: 7px; text-decoration: none !important; transition: background .15s, color .15s; }
+.nav a:hover { color: var(--text); background: color-mix(in srgb, var(--text) 6%, transparent); }
+.nav a.on { background: var(--accent); color: var(--accent-ink); font-weight: 700; box-shadow: 0 1px 6px color-mix(in srgb, var(--accent) 45%, transparent); }
+.nav a.on:hover { color: var(--accent-ink); }
+.nav a.on .k { opacity: .8; }
 .nav a .k { font-family: var(--mono); font-size: 10px; opacity: .55; border: 1px solid currentColor; border-radius: 4px; padding: 0 4px; }
 .strip { display: flex; align-items: center; gap: 10px; flex: 1; flex-wrap: wrap; }
 .top .right { display: flex; align-items: center; gap: 8px; margin-left: auto; }
-@media (max-width: 860px) { .brand .s, .nav a .k { display: none; } .top { gap: 10px; padding: 10px 14px; } }
+@media (max-width: 860px) { .brand .s, .nav a .k { display: none; } .nav a { padding: 0 11px; } .top { gap: 10px; padding: 10px 14px; } }
 
 .chip { display: inline-flex; align-items: center; gap: 7px; height: 28px; padding: 0 11px; border-radius: 999px; font-size: 12.5px; font-weight: 600;
         border: 1px solid var(--line); background: var(--surface); color: var(--text2); white-space: nowrap; text-decoration: none !important; }
@@ -87,6 +89,21 @@ a.chip:hover { border-color: var(--line2); color: var(--text); }
 .hint b { color: var(--text2); font-weight: 600; }
 .sec { display: flex; align-items: center; justify-content: space-between; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; padding: 0 2px; }
 .sec .n { background: var(--surface2); border: 1px solid var(--line); border-radius: 999px; padding: 0 8px; font-size: 11px; color: var(--text2); }
+.sec .n { margin-left: 6px; text-transform: none; letter-spacing: 0; }
+.sec.fold { cursor: pointer; user-select: none; }
+.sec.fold:hover { color: var(--text2); }
+.chev { display: inline-block; font-size: 10px; margin-left: 4px; transition: transform .15s; }
+.shut > .sec .chev, .sec.shut .chev, .shut > .askhd .chev { transform: rotate(-90deg); }
+
+/* ---------- 좌우 분할 손잡이(UI.splitter): 사이드바와 본문 사이 틈. 위치 값은 .body 의 padding(18/22/48)·gap(18)과 맞출 것 ---------- */
+.split { position: relative; }
+.splitter { position: absolute; top: 18px; bottom: 48px; left: calc(22px + var(--side-w, 340px)); width: 18px; cursor: col-resize; z-index: 5; touch-action: none; }
+.splitter::before { content: ""; display: block; position: sticky; top: calc(50vh - 20px); width: 4px; height: 40px; margin: 0 auto; border-radius: 4px; background: var(--line2); transition: background .15s; }
+.splitter::after { content: ""; position: absolute; top: 0; bottom: 0; left: 50%; width: 2px; margin-left: -1px; border-radius: 2px; background: var(--accent); opacity: 0; transition: opacity .15s; }
+.splitter:hover::after, .splitter.drag::after { opacity: .55; }
+.splitter:hover::before, .splitter.drag::before { background: var(--accent); }
+body.resizing { cursor: col-resize; user-select: none; }
+@media (max-width: 980px) { .splitter { display: none; } }
 
 /* ---------- badges / buttons / inputs ---------- */
 .badge { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border-radius: 7px; font-size: 11.5px; font-weight: 600; white-space: nowrap; background: var(--surface2); color: var(--text2); border: 1px solid var(--line); }
@@ -213,3 +230,52 @@ a.nitem:hover { background: var(--surface2); }
 /* 상단바가 좁아지면 탭 이름이 두 줄로 꺾이지 않게 단축키 표시부터 숨긴다 */
 .nav a { white-space: nowrap; }
 @media (max-width: 1420px) { .nav a .k { display: none; } }
+
+/* ---------- 선택 상자(UI: selectOpen) — 닫힌 모양은 select.in, 펼친 목록은 .selpop(검색 포함). 브라우저 기본 목록은 쓰지 않는다 ---------- */
+select.in { appearance: none; -webkit-appearance: none; cursor: pointer; padding-right: 28px !important; text-overflow: ellipsis;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%238a93a6' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.5 4.5 6 8l3.5-3.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 9px center; background-size: 12px; }
+select.in:hover { border-color: var(--line2); }
+select.in.open { border-color: color-mix(in srgb, var(--accent) 60%, transparent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent); }
+.selpop { position: fixed; z-index: 1000; margin: 0; max-width: min(460px, calc(100vw - 16px)); padding: 5px; border-radius: 12px; border: 1px solid var(--line2); background: var(--raised); color: var(--text); box-shadow: 0 14px 36px rgba(0,0,0,.32); display: flex; flex-direction: column; gap: 5px; font-size: 13px; text-transform: none; letter-spacing: 0; font-weight: 400; }
+.selpop .sq { height: 32px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg2); color: var(--text); font: inherit; font-size: 12.5px; outline: none; flex: none; }
+.selpop .sq:focus { border-color: color-mix(in srgb, var(--accent) 60%, transparent); }
+.selpop .sl { overflow: auto; max-height: var(--sl-max, 300px); outline: none; display: flex; flex-direction: column; gap: 1px; }
+.selpop .so { position: relative; flex: none; padding: 7px 30px 7px 10px; border-radius: 8px; cursor: pointer; color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.selpop .so.cur { background: color-mix(in srgb, var(--text) 8%, transparent); color: var(--text); }
+.selpop .so.sel { color: var(--text); font-weight: 600; }
+.selpop .so.sel::after { content: "✓"; position: absolute; right: 10px; color: var(--accent); font-weight: 700; }
+.selpop .so.dis { opacity: .45; cursor: default; }
+.selpop .se { padding: 10px; color: var(--muted); font-size: 12.5px; text-align: center; }
+
+/* ---------- 화면(탭) 전환: 문서 간 view transition — 상단바는 제자리에 두고 본문만 짧게 겹쳐 바꾼다(지원 브라우저만, 미지원이면 그냥 이동) ---------- */
+@view-transition { navigation: auto; }
+#topbar { view-transition-name: topbar; }
+::view-transition-old(root), ::view-transition-new(root) { animation-duration: .14s; }
+::view-transition-group(topbar), ::view-transition-old(topbar), ::view-transition-new(topbar) { animation-duration: .14s; }
+@media (prefers-reduced-motion: reduce) { ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; } }
+
+/* ---------- 가벼운 움직임 · 그리기 비용 줄이기 ----------
+   상단바의 배경 흐림(backdrop-filter)은 스크롤할 때마다 GPU 가 다시 계산해서 뺐다(거의 불투명한 배경으로 대체).
+   활동 로그 줄은 화면 밖이면 배치·그리기를 건너뛴다(수천 줄이 쌓여도 스크롤·추가가 가볍게). */
+.ln { content-visibility: auto; contain-intrinsic-size: auto 22px; }
+dialog[open], .selpop, .notice-panel.open { animation: pop .13s ease-out; }
+dialog[open]::backdrop { animation: dim .13s ease-out; }
+@keyframes pop { from { opacity: 0; transform: translateY(4px) scale(.985); } to { opacity: 1; transform: none; } }
+@keyframes dim { from { opacity: 0; } to { opacity: 1; } }
+.sitem, .titem, .irow, .ritem { transition: background .12s, border-color .12s, box-shadow .12s; }
+/* 세션·스레드 바꿔 끼우기(UI.swapOut/swapIn): 응답이 80ms 안에 오면 흐려지지 않고 바로 밀려 들어온다 */
+.swap-out { opacity: .45; pointer-events: none; transition: opacity .15s .08s; }
+.swap-in { animation: swapin .22s cubic-bezier(.2, .7, .2, 1); }
+@keyframes swapin { from { opacity: 0; transform: translateY(var(--dy, 12px)); } to { opacity: 1; transform: none; } }
+/* 안쪽 스크롤 영역: 끝에 닿아도 바깥 화면이 따라 움직이지 않게, 스크롤바가 생겨도 폭이 흔들리지 않게 */
+.slist, .tlist, .ilist, .rlist, .nlist, .diff, #log, .selpop .sl { overscroll-behavior: contain; }
+.slist, .tlist { scrollbar-gutter: stable; }
+/* 긴 목록: 화면 밖 항목은 배치·그리기를 건너뛴다 */
+.sitem, .titem { content-visibility: auto; contain-intrinsic-size: auto 84px; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }
+
+/* ---------- 탭 전환(셸, ui.js): 다른 탭은 화면 전체를 덮는 iframe. 숨길 때도 배치는 유지한다(visibility) — display:none 이면 로그 따라가기 등 크기 계산이 깨진다 ---------- */
+.tabframe { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; z-index: 900; background: var(--bg); visibility: hidden; }
+.tabframe[data-on="1"] { visibility: visible; }
+html.covered { overflow: hidden; }

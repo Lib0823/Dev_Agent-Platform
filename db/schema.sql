@@ -158,6 +158,7 @@ CREATE TABLE IF NOT EXISTS research_job (
     verify             BOOLEAN      NOT NULL DEFAULT false, -- 2차 검증 수행 여부
     verify_state       VARCHAR(16),                      -- PASS / FIXED / FAIL / SKIPPED
     verify_md          TEXT,                             -- 검증자 보고서
+    kind               VARCHAR(16)  NOT NULL DEFAULT 'doc', -- 결과 형식: doc(조사 문서) / issue(GitLab 이슈 초안)
     created_at         TIMESTAMPTZ  NOT NULL DEFAULT now(),
     started_at         TIMESTAMPTZ,
     finished_at        TIMESTAMPTZ,

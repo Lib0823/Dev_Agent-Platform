@@ -62,18 +62,19 @@ public class ResearchController {
         return t == null ? ResponseEntity.notFound().build() : ResponseEntity.ok(t);
     }
 
-    /** 질문 접수(폼). projects 는 쉼표 구분. parentId 가 있으면 후속 질문(프로젝트/모델은 루트 값). */
+    /** 질문 접수(폼). projects 는 쉼표 구분. parentId 가 있으면 후속 질문(프로젝트/모델은 루트 값). kind=issue 면 결과를 이슈 초안 형식으로. */
     @PostMapping("/api/research")
     public Map<String, Object> submit(@RequestParam String question,
                                       @RequestParam(required = false) String projects,
                                       @RequestParam(required = false) String model,
                                       @RequestParam(required = false) String effort,
                                       @RequestParam(required = false) Long parentId,
-                                      @RequestParam(required = false) Boolean verify) {
+                                      @RequestParam(required = false) Boolean verify,
+                                      @RequestParam(required = false) String kind) {
         Map<String, Object> out = new LinkedHashMap<>();
         try {
             List<String> ps = projects == null ? List.of() : Arrays.stream(projects.split(",")).map(String::strip).filter(s -> !s.isEmpty()).toList();
-            ResearchJob j = research.submit(question, ps, model, effort, parentId, false, "dashboard", verify);
+            ResearchJob j = research.submit(question, ps, model, effort, parentId, false, "dashboard", verify, kind);
             out.put("ok", true);
             out.put("id", j.getId());
             out.put("rootId", j.getRootId());
