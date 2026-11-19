@@ -15,7 +15,7 @@ import java.util.Map;
 
 /**
  * GitLab REST API v4 최소 클라이언트 (PAT 인증).
- * 프로젝트 조회 / 라벨 이슈 목록 / 이슈 단건 / 이슈 노트 / 코멘트 작성 / MR 생성.
+ * 프로젝트 조회 / 라벨 이슈 목록 / 이슈 단건 / 이슈 등록 / 이슈 노트 / 코멘트 작성 / MR 생성.
  */
 @Component
 public class GitLabClient {
@@ -109,6 +109,24 @@ public class GitLabClient {
         if (n == null || !n.hasNonNull("iid")) {
             throw new IllegalStateException("GitLab 이슈 조회 실패: project=" + projectId + " iid=" + iid);
         }
+        return toIssue(n);
+    }
+
+    /** 이슈 등록(플랫폼 화면의 "새 이슈"). labels 는 쉼표 구분, 비어 있으면 라벨 없이. */
+    public Issue createIssue(long projectId, String title, String description, String labels) {
+        Map<String, Object> form = new LinkedHashMap<>();
+        form.put("title", title);
+        form.put("description", description == null ? "" : description);
+        if (labels != null && !labels.isBlank()) {
+            form.put("labels", labels.strip());
+        }
+        JsonNode n = rest.post().uri("/projects/{p}/issues", projectId)
+                .contentType(MediaType.APPLICATION_JSON).body(form)
+                .retrieve().body(JsonNode.class);
+        if (n == null || !n.hasNonNull("iid")) {
+            throw new IllegalStateException("GitLab 이슈 등록 실패: project=" + projectId);
+        }
+        log.info("GitLab 이슈 등록 project={} iid={}", projectId, n.get("iid").asLong());
         return toIssue(n);
     }
 

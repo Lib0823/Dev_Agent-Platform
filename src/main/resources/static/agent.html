@@ -21,6 +21,16 @@
   .cmdbox .ico { position: absolute; left: 12px; top: 11px; color: var(--muted); }
   .cmdbox .go { position: absolute; right: 6px; top: 6px; height: 28px; width: 28px; border-radius: 8px; border: none; background: var(--accent); color: #fff; display: grid; place-items: center; }
   .cmdhint { font-size: 11.5px; color: var(--muted); margin-top: 6px; padding-left: 2px; }
+  .cmdbtns { display: flex; gap: 6px; margin-top: 10px; }
+  .cmdbtns .btn { flex: 1; justify-content: center; }
+  /* ---------- 새 이슈 ---------- */
+  dialog.newissue { width: min(620px, calc(100vw - 32px)); padding: 20px; border-radius: 16px; border: 1px solid var(--line); background: var(--surface); color: var(--text); }
+  dialog.newissue::backdrop { background: rgba(0,0,0,.45); }
+  dialog.newissue h3 { margin: 0 0 14px; font-size: 16px; }
+  dialog.newissue label.l { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin: 12px 0 6px; }
+  dialog.newissue textarea.in { min-height: 180px; }
+  dialog.newissue .chk { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 13px; color: var(--text2); }
+  dialog.newissue .btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
   .slist { overflow: auto; flex: 1; display: flex; flex-direction: column; gap: 6px; padding-right: 2px; }
   .pfilter { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }
   .pfilter .pf { height: 26px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface2); color: var(--text2); font-size: 12px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
@@ -175,6 +185,10 @@
           <button class="go" onclick="runCmd()" title="실행" id="goBtn"></button>
         </div>
         <div class="cmdhint">이슈를 수동으로 시작하거나 라벨 스캔을 바로 돌립니다.</div>
+        <div class="cmdbtns">
+          <button class="btn sm" id="btnNew" onclick="openNewIssue()" title="GitLab 이슈를 여기서 등록합니다"></button>
+          <button class="btn sm" id="btnScan" onclick="scanNow()" title="라벨 이슈를 지금 바로 가져옵니다(평소에는 2분마다 자동)"></button>
+        </div>
       </div>
       <div class="sec"><span>세션</span><span class="n" id="scount">0</span></div>
       <div class="pfilter" id="pfilter"></div>
@@ -236,7 +250,7 @@
             <div class="q"><span class="ic" id="aIco"></span><span id="aQ"></span></div>
             <textarea class="in" id="fbIn" placeholder="피드백을 쓰면 설계/수정에 반영됩니다. Enter 보내기 · Shift+Enter 줄바꿈"></textarea>
             <div class="btns">
-              <button class="btn primary" id="btnApprove" onclick="reply('진행')"></button>
+              <button class="btn primary" id="btnApprove" onclick="approve()"></button>
               <button class="btn" id="btnFb" onclick="sendFeedback()"></button>
               <button class="btn danger" id="btnAbort" onclick="abortSession()"></button>
               <span class="note" id="aNote"></span>
@@ -287,6 +301,20 @@
     </main>
   </div>
 </div>
+<dialog class="newissue" id="niDlg">
+  <h3>새 이슈 등록</h3>
+  <label class="l" for="niProj">프로젝트</label>
+  <select class="in" id="niProj"></select>
+  <label class="l" for="niTitle">제목</label>
+  <input class="in" id="niTitle" maxlength="255" autocomplete="off" placeholder="무엇을 고치거나 만들지 한 줄로">
+  <label class="l" for="niBody">내용</label>
+  <textarea class="in" id="niBody" placeholder="현상, 기대 동작, 재현 방법, 참고할 화면·파일 등 (마크다운)"></textarea>
+  <label class="chk"><input type="checkbox" id="niStart" checked> <span id="niStartL">등록 후 에이전트가 바로 시작</span></label>
+  <div class="btns">
+    <button class="btn" onclick="$('niDlg').close()">취소</button>
+    <button class="btn primary" id="niGo" onclick="createIssue()">등록</button>
+  </div>
+</dialog>
 <div class="toasts" id="toasts"></div>
 
 <script src="/ui.js"></script>
@@ -296,7 +324,8 @@ UI.topbar('agent', '에이전트 대시보드');
 // 대시보드에서는 상단 칩이 현재 페이지 상태이므로 링크 대신 실시간 연결 칩을 추가
 $('strip').insertAdjacentHTML('beforeend', '<span class="chip live" id="live"><span class="dot"></span><span>연결 중</span></span>');
 $('icTerm').innerHTML = I.terminal; $('goBtn').innerHTML = I.arrow; $('icEmpty').innerHTML = I.clock.replace(/width="14" height="14"/, 'width="30" height="30"');
-$('btnApprove').innerHTML = I.check + '진행'; $('btnFb').innerHTML = I.send + '피드백 보내기 <span class="kbd">⏎</span>'; $('btnAbort').innerHTML = I.x + '중단';
+$('btnNew').innerHTML = I.plus + '새 이슈'; $('btnScan').innerHTML = I.refresh + '이슈 가져오기';
+$('btnApprove').innerHTML = I.check + '진행';$('btnFb').innerHTML = I.send + '피드백 보내기 <span class="kbd">⏎</span>'; $('btnAbort').innerHTML = I.x + '중단';
 
 const STEPS = [
   {k:'ANALYZING',  n:'분석'},
@@ -624,9 +653,9 @@ function renderActions() {
   $('fbIn').style.display = waiting ? '' : 'none';
   $('aIco').innerHTML = waiting ? I.info : `<span style="color:var(--run)">${I.refresh}</span>`;
   $('aQ').innerHTML = s.state==='DESIGN_WAIT'
-      ? '<b>설계안을 확인해 주세요.</b> 「진행」이면 이 설계대로 코드를 수정합니다. 피드백을 보내면 설계를 다시 정리합니다.'
+      ? '<b>설계안을 확인해 주세요.</b> 「진행」이면 이 설계대로 코드를 수정합니다(입력칸에 쓴 글은 추가 지시로 함께 전달). 피드백을 보내면 설계를 다시 정리합니다.'
     : s.state==='REVIEW_WAIT'
-      ? '<b>변경 내용을 확인해 주세요.</b> 「진행」이면 컨벤션 브랜치(<code>fix/일감번호</code> 등)로 커밋·푸시하고 Draft MR을 만듭니다. 피드백을 보내면 추가 수정하고, 「검증」「재검증」이라고만 보내면 수정 없이 검증만 다시 돌립니다.'
+      ? '<b>변경 내용을 확인해 주세요.</b> 「진행」이면 컨벤션 브랜치(<code>fix/일감번호</code> 등)로 커밋·푸시하고 Draft MR을 만듭니다. 입력칸에 글을 쓴 채 「진행」을 누르면 푸시하지 않고 그 내용부터 반영합니다. 피드백을 보내면 추가 수정하고, 「검증」「재검증」이라고만 보내면 수정 없이 검증만 다시 돌립니다.'
     : s.state==='NEW' ? '대기열에 있습니다. 앞선 세션이 끝나면 자동으로 시작합니다.'
     : s.state==='PREPARING' ? '<b>선분석 중</b> — 앞선 세션이 확인을 기다리는 동안 이 이슈를 미리 분석하고 있습니다.'
     : s.state==='READY' ? '<b>설계가 준비되었습니다.</b> 앞선 세션이 끝나면 자동으로 설계 확인을 요청합니다. 설계안 탭에서 미리 볼 수 있습니다.'
@@ -637,18 +666,48 @@ function renderActions() {
   $('aNote').textContent = waiting && busyMine ? '이전 답변을 처리하는 중입니다…' : waiting ? (multi ? '동시 진행 중: 자기방에서는 「repo#1 진행」처럼 대상을 앞에 붙여 답합니다' : '메신저 자기방에서는 「진행」「중단」「diff」「피드백: …」 만 인정됩니다') : '';
 }
 
-async function reply(text) {
+async function reply(text, note) {
   $('btnApprove').disabled = true; $('btnFb').disabled = true;      // 더블클릭/연타 방지 — 다음 overview 갱신에서 상태에 맞게 다시 계산
   let ok = false;
   try {
+    const form = {text, sessionId: String(sel ? sel.id : '')};
+    if (note) form.note = note;
     const r = await (await fetch('/api/issues-reply', {method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'},
-      body: new URLSearchParams({text, sessionId: String(sel ? sel.id : '')})})).json();
+      body: new URLSearchParams(form)})).json();
     ok = /전달했습니다/.test(r.result); toast(r.result, ok?'ok':'err');
   } catch(e) { toast('전송 실패: '+e, 'err'); }
   setTimeout(loadOverview, 700);
   return ok;
 }
 async function sendFeedback() { const t=$('fbIn').value.trim(); if(!t) return; if (await reply(t)) $('fbIn').value=''; }
+// 진행: 입력칸에 쓴 글이 있으면 코멘트로 함께 보낸다(설계 확인 → 추가 지시, 리뷰 확인 → 푸시 전에 반영)
+async function approve() { const t=$('fbIn').value.trim(); if (await reply('진행', t)) $('fbIn').value=''; }
+
+// ---------------------------------------------------------------- 새 이슈 · 즉시 스캔
+async function scanNow() {
+  const b = $('btnScan'); b.disabled = true;
+  try { const r = await (await fetch('/api/issues-command?cmd='+encodeURIComponent('스캔'), {method:'POST'})).json(); toast((r.result||'').split('\n')[0], 'ok'); }
+  catch(e) { toast('이슈를 가져오지 못했습니다: '+e, 'err'); }
+  b.disabled = false; loadOverview();
+}
+function openNewIssue() {
+  if (!projects.length) { toast('대상 프로젝트가 없습니다. 플랫폼 탭에서 먼저 등록해 주세요.', 'err'); return; }
+  const cur = $('niProj').value || projFilter;
+  $('niProj').innerHTML = projects.map(p => `<option value="${esc(p)}" ${p===cur?'selected':''}>${esc(p)}</option>`).join('');
+  $('niDlg').showModal(); $('niTitle').focus();
+}
+async function createIssue() {
+  const title = $('niTitle').value.trim();
+  if (!title) { toast('제목을 입력해 주세요.', 'err'); $('niTitle').focus(); return; }
+  const b = $('niGo'); b.disabled = true;
+  try {
+    const r = await (await fetch('/api/issues-create', {method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'},
+      body: new URLSearchParams({project: $('niProj').value, title, description: $('niBody').value, start: String($('niStart').checked)})})).json();
+    toast(r.result, r.ok?'ok':'err');
+    if (r.ok) { $('niTitle').value=''; $('niBody').value=''; $('niDlg').close(); setTimeout(loadOverview, 700); }
+  } catch(e) { toast('등록 실패: '+e, 'err'); }
+  b.disabled = false;
+}
 async function abortSession() {
   if (!confirm(`${sel.projectPath}#${sel.issueIid} 를 중단할까요?\n작업트리의 변경은 버려집니다. 실행 중인 작업은 즉시 종료됩니다.`)) return;
   const r = await (await fetch(`/api/agent/sessions/${sel.id}/abort`, {method:'POST'})).json();

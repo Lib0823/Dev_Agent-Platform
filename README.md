@@ -169,6 +169,8 @@
 
 **명령**(`@AI 이슈 …`): `상태` · `목록` · `스캔`(즉시) · `프로젝트 [추가|삭제 group/repo]` · `중단 [대상]` · `group/repo#12` 또는 이슈 URL · `도움말`. 관리 페이지와 대시보드에서도 같은 일을 합니다(`POST /api/issues-reply`, `/api/issues-command`).
 
+**에이전트 화면에서 바로**: 「새 이슈」로 GitLab 이슈를 등록합니다(`POST /api/issues-create` — 대상 프로젝트만, "등록 후 바로 시작"이면 스캔 라벨을 붙이고 곧바로 큐에 넣음). 「이슈 가져오기」는 2분 주기를 기다리지 않고 라벨 스캔을 즉시 돌립니다. 확인 대기 중 입력칸에 글을 쓴 채 「진행」을 누르면 코멘트가 함께 전달됩니다(`note` 파라미터) — 설계 확인에서는 설계대로 수정하되 추가 지시로 반영, 리뷰 확인에서는 푸시하지 않고 그 내용부터 수정·검증한 뒤 다시 확인을 받습니다.
+
 ### 검증 단계(VERIFYING)
 
 - **봇 검사**(`VerifyService`): 바뀐 `.js` → `node --check`, 바뀐 `.jsp` → `jspcheck`(Tomcat JspC, 빌드 산출물 필요), 빌드(`GITLAB_VERIFY_COMMANDS` 의 `group/repo=명령`, 없으면 pom → `mvn -o -q compile`, gradle → `gradlew compileJava`). 코드를 쓴 모델의 보고와 무관하게 돕니다.

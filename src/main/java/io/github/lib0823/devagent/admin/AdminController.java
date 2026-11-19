@@ -163,8 +163,24 @@ public class AdminController {
      * 본문은 form 파라미터로도 받는다(긴 피드백이 URL 길이 제한에 걸리지 않도록). sessionId 가 있으면 그 세션이 대기 중일 때만 적용.
      */
     @PostMapping("/api/issues-reply")
-    public Map<String, Object> issuesReply(@RequestParam String text, @RequestParam(required = false) Long sessionId) {
-        return Map.of("result", issueAgent.injectReply(text, sessionId));
+    public Map<String, Object> issuesReply(@RequestParam String text, @RequestParam(required = false) Long sessionId,
+                                           @RequestParam(required = false) String note) {
+        return Map.of("result", issueAgent.injectReply(text, sessionId, note));
+    }
+
+    /**
+     * GitLab 이슈 등록(에이전트 화면 "새 이슈"). project 는 대상 프로젝트만. start=true 면 스캔 라벨을 붙이고 바로 큐에 넣는다.
+     * GitLab 에 글을 쓰는 요청이라 다른 사이트 페이지에서 온 것은 막는다.
+     */
+    @PostMapping("/api/issues-create")
+    public Map<String, Object> issuesCreate(@RequestParam String project, @RequestParam String title,
+                                            @RequestParam(defaultValue = "") String description,
+                                            @RequestParam(defaultValue = "true") boolean start,
+                                            jakarta.servlet.http.HttpServletRequest req) {
+        if (SystemController.foreign(req)) {
+            return Map.of("ok", false, "result", "이 화면에서만 요청할 수 있습니다.");
+        }
+        return issueAgent.createIssue(project, title, description, start);
     }
 
     @GetMapping("/api/rooms")

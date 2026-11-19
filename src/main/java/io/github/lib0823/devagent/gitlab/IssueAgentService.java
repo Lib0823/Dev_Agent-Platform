@@ -350,6 +350,14 @@ public class IssueAgentService {
      * 반환: 접수 결과 메시지.
      */
     public String injectReply(String text, Long sessionId) {
+        return injectReply(text, sessionId, null);
+    }
+
+    /**
+     * note: 「진행」과 함께 보낸 코멘트(대시보드 입력칸에 글을 쓴 채 진행을 누른 경우). 설계 확인에서는 설계대로 수정하되
+     * 코멘트를 추가 지시로 넘기고, 리뷰 확인에서는 푸시하지 않고 코멘트를 반영해 추가 수정한다(확인 안 된 변경이 올라가지 않게).
+     */
+    public String injectReply(String text, Long sessionId, String note) {
         if (!props.enabled()) {
             return "이슈 에이전트가 비활성 상태입니다.";
         }
@@ -380,11 +388,51 @@ public class IssueAgentService {
             return "답변 내용이 비어 있습니다.";
         }
         final String expected = s.getState();
-        log.info("이슈 {} 답변 주입(관리 API): {}", s.ref(), abbreviate(reply, 80));
-        notifier.sendSelf(PFX + "(관리 페이지 답변) " + abbreviate(reply, 200));
-        events.emit(id, IssueEvent.REPLY, "모니터 답변: " + abbreviate(reply, 200), reply);
-        submit(id, () -> handleReply(id, reply, expected));
-        return s.ref() + " 에 답변을 전달했습니다: " + abbreviate(reply, 80);
+        // 코멘트는 승인(진행)일 때만 따로 다룬다 — 그 외 답변은 본문 자체가 피드백이다
+        final String extra = note == null || note.isBlank() || !APPROVE.contains(norm(stripCommand(reply))) ? null : note.strip();
+        final String shown = extra == null ? reply : reply + " + 코멘트: " + extra;
+        log.info("이슈 {} 답변 주입(관리 API): {}", s.ref(), abbreviate(shown, 80));
+        notifier.sendSelf(PFX + "(관리 페이지 답변) " + abbreviate(shown, 200));
+        events.emit(id, IssueEvent.REPLY, "모니터 답변: " + abbreviate(shown, 200), shown);
+        submit(id, () -> handleReply(id, reply, expected, extra));
+        return s.ref() + " 에 답변을 전달했습니다: " + abbreviate(shown, 80);
+    }
+
+    /**
+     * 플랫폼 화면에서 GitLab 이슈를 등록한다. 대상 프로젝트에 등록된 저장소만 받는다.
+     * start 면 스캔 라벨을 붙여 만들고 곧바로 큐에 넣는다(스캔 주기를 기다리지 않음). 반환: ok/result/url/ref.
+     */
+    public Map<String, Object> createIssue(String project, String title, String description, boolean start) {
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("ok", false);
+        if (!props.enabled()) {
+            out.put("result", "이슈 에이전트가 비활성 상태입니다 (GITLAB_ENABLED=false).");
+            return out;
+        }
+        String t = title == null ? "" : title.strip();
+        if (t.isEmpty() || t.length() > 255) {
+            out.put("result", t.isEmpty() ? "제목을 입력해 주세요." : "제목은 255자까지입니다.");
+            return out;
+        }
+        String resolved = projectReg.resolveProject(project == null ? "" : project.strip());
+        if (resolved == null) {
+            out.put("result", "대상 프로젝트에서 '" + project + "' 를 찾지 못했습니다: " + projectReg.projects());
+            return out;
+        }
+        try {
+            GitLabClient.Project p = projectReg.project(resolved);
+            GitLabClient.Issue is = gitlab.createIssue(p.id(), t, description == null ? "" : description.strip(), start ? props.label() : null);
+            String ref = p.path() + "#" + is.iid();
+            out.put("ok", true);
+            out.put("ref", ref);
+            out.put("url", is.webUrl());
+            out.put("result", start ? "이슈를 등록했습니다. " + startManual(ref)
+                    : ref + " 이슈를 등록했습니다(라벨 없음 — 에이전트는 시작하지 않습니다).");
+        } catch (RuntimeException e) {
+            log.warn("GitLab 이슈 등록 실패 project={}: {}", resolved, e.toString());
+            out.put("result", "이슈 등록 실패: " + e.getMessage());
+        }
+        return out;
     }
 
     /** 사용자 답변을 기다리는 세션이 있는지 (MentionService 가 자기방 @AI 를 양보할지 판단). */
@@ -914,6 +962,11 @@ public class IssueAgentService {
     }
 
     private void handleReply(long id, String reply, String expectedState) {
+        handleReply(id, reply, expectedState, null);
+    }
+
+    /** note: 「진행」과 함께 온 코멘트(없으면 null) — {@link #injectReply(String, Long, String)} 참고. */
+    private void handleReply(long id, String reply, String expectedState, String note) {
         IssueSession s = sessions.find(id);
         if (s == null || !s.isWaiting()) {
             return;
@@ -964,12 +1017,16 @@ public class IssueAgentService {
         try {
             if (IssueSession.DESIGN_WAIT.equals(s.getState())) {
                 if (approve) {
-                    fix(s, null);
+                    fix(s, null, note);
                 } else {
                     reviseDesign(s, raw);
                 }
             } else { // REVIEW_WAIT
-                if (approve) {
+                if (approve && note != null) {
+                    // 코멘트가 붙은 진행: 반영되지 않은 요청을 둔 채 푸시하지 않는다 → 추가 수정 후 다시 리뷰 확인
+                    events.emit(id, IssueEvent.INFO, "진행과 함께 온 코멘트 — 푸시 전에 반영합니다(수정·검증 뒤 다시 리뷰 확인)");
+                    fix(s, note);
+                } else if (approve) {
                     push(s);
                 } else {
                     fix(s, raw);
@@ -1008,6 +1065,11 @@ public class IssueAgentService {
     }
 
     private void fix(IssueSession s, String feedback) {
+        fix(s, feedback, null);
+    }
+
+    /** approveNote: 설계 승인(첫 수정)과 함께 온 코멘트 — 설계안에 더해 따를 추가 지시로 프롬프트에 붙인다. */
+    private void fix(IssueSession s, String feedback, String approveNote) {
         boolean first = feedback == null;
         if (!first) {
             s.setFeedbackRounds(s.getFeedbackRounds() + 1);
@@ -1030,7 +1092,8 @@ public class IssueAgentService {
                 rebased = want;
             }
         }
-        String prompt = first ? prompts.fixPrompt(s) + (rebased == null ? "" : "\n\n참고: 작업트리를 origin/" + rebased + " 기준으로 새로 받았습니다(분석 때와 기준 브랜치가 다름). 파일 내용이 분석 때와 다를 수 있으니 수정 전 다시 읽으세요.") :
+        String prompt = first ? prompts.fixPrompt(s) + (rebased == null ? "" : "\n\n참고: 작업트리를 origin/" + rebased + " 기준으로 새로 받았습니다(분석 때와 기준 브랜치가 다름). 파일 내용이 분석 때와 다를 수 있으니 수정 전 다시 읽으세요.")
+                + (approveNote == null ? "" : "\n\n사용자가 설계를 승인하면서 남긴 추가 지시(설계안과 어긋나면 이 지시가 우선):\n" + approveNote) :
                 "사용자 피드백:\n" + feedback + "\n\n피드백을 반영해 코드를 추가 수정하고, 같은 출력 형식(## 변경 요약 / ## 검증 결과 / ## 커밋 메시지)으로 전체 변경 기준으로 다시 출력하세요. "
                         + "피드백이 질문이면 먼저 '## 답변' 절에 답하세요. git 명령으로 커밋/브랜치를 만들지 마세요.";
         CodingAgent.Result r;
