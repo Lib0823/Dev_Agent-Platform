@@ -38,12 +38,16 @@
   .pchips .pc:hover { border-color: var(--line2); color: var(--text); }
   .pchips .pc.sel { border-color: color-mix(in srgb, var(--accent) 55%, transparent); color: var(--text); background: color-mix(in srgb, var(--accent) 16%, var(--surface)); }
   .pchips .pc .o { font-family: var(--mono); font-size: 10px; color: var(--accent); }
-  .brow { display: grid; grid-template-columns: 12px minmax(0, 62px) minmax(0, 1fr) 22px 22px; gap: 5px; align-items: center; margin-top: 6px; }
-  .brow .n { font-family: var(--mono); font-size: 10px; color: var(--accent); text-align: center; }
-  .brow .nm { font-size: 12px; font-weight: 600; color: var(--text2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .brow select.in { height: 30px; padding: 0 4px 0 8px; font-size: 12px; text-overflow: ellipsis; }
-  .brow .mini { height: 22px; width: 22px; border-radius: 7px; border: 1px solid var(--line); background: var(--surface); color: var(--text2); font-size: 13px; line-height: 1; }
-  .brow .mini:hover { color: var(--text); border-color: var(--line2); }
+  /* 고른 프로젝트는 칩 하나에 이름 | 브랜치를 함께 담는다(브랜치 칸을 누르면 선택 목록). 브랜치 줄을 따로 늘어놓지 않는다 */
+  .pchips span.pc.sel { padding: 0; gap: 0; cursor: default; max-width: 100%; overflow: hidden; }
+  .pchips .pc .pn { height: 100%; padding: 0 8px 0 10px; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .pchips .pc .pn:hover { color: var(--err); }
+  .pchips .pc .pb { position: relative; height: 100%; min-width: 0; max-width: 150px; padding: 0 8px 0 7px; display: inline-flex; align-items: center; gap: 4px; border-left: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); color: var(--muted); font-family: var(--mono); font-size: 11px; font-weight: 500; }
+  .pchips .pc .pb.set { color: var(--accent); font-weight: 600; }
+  .pchips .pc .pb:hover, .pchips .pc .pb:focus-within { color: var(--text); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+  .pchips .pc .pb .bt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pchips .pc .pb .cv { font-size: 9px; opacity: .7; flex: none; }
+  .pchips .pc .pb select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; border: 0; padding: 0; margin: 0; }
   .ask select.in { height: 34px; padding: 0 10px; font-size: 12.5px; }
   .ask .foot { display: flex; align-items: center; gap: 8px; }
   .ask .foot .hint { font-size: 11.5px; color: var(--muted); flex: 1; min-width: 0; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -169,9 +173,8 @@
       <div class="ask" id="ask">
         <div class="askhd" onclick="toggleAsk()" title="접기/펴기"><span class="lbl">새 리서치</span><span class="chev">▾</span></div>
         <div class="askbody">
-        <div class="lbl" title="여러 개를 고를 수 있습니다. 첫 번째가 작업 디렉터리입니다.">프로젝트 · 브랜치</div>
+        <div class="lbl" title="여러 개를 고를 수 있습니다(번호 1 이 작업 디렉터리). 고른 칩의 오른쪽 칸을 누르면 브랜치를 바꿉니다.">프로젝트 · 브랜치</div>
         <div class="pchips" id="projChips"><span class="skel" style="width:60%"></span></div>
-        <div id="branchRows"></div>
         <textarea class="in" id="qIn" placeholder="예) 스케줄 Call 작업 목록을 유형별로 표로 정리해줘&#10;Ctrl+Enter 로 보내기"></textarea>
         <div class="optrow">
           <select class="in" id="mdl" title="모델"></select>
@@ -318,36 +321,45 @@ async function loadOptions() {
 }
 function renderChips() {
   const box = $('projChips');
-  if (!options.projects.length) { box.innerHTML = '<span class="md-empty">대상 프로젝트가 없습니다. 플랫폼 → 에이전트 설정 → 대상 프로젝트에 추가하세요.</span>'; $('branchRows').innerHTML = ''; return; }
-  box.innerHTML = options.projects.map(p => { const i = selEntries.findIndex(e => e.p === p); return `<button class="pc ${i >= 0 ? 'sel' : ''}" onclick="toggleProj('${esc(p)}')" title="${esc(p)}">${i >= 0 ? `<span class="o">${i + 1}</span>` : ''}${esc(p.split('/').pop())}</button>`; }).join('');
-  renderBranchRows();
-}
-// 선택한 프로젝트마다 브랜치 고르기. + 를 누르면 같은 프로젝트의 다른 브랜치를 한 줄 더 넣는다(브랜치 간 비교 질의).
-function renderBranchRows() {
-  $('branchRows').innerHTML = selEntries.map((e, i) => {
-    const c = branchCache[e.p]; const def = c && c.defaultBranch;
-    const names = c ? c.branches.slice() : []; if (e.b && !names.includes(e.b)) names.unshift(e.b);
-    const opts = `<option value="">${def ? esc(def) + ' (기본)' : (c && c.error ? '기본 브랜치' : '불러오는 중…')}</option>`
-      + names.filter(n => n !== def).map(n => `<option value="${esc(n)}" ${n === e.b ? 'selected' : ''}>${esc(n)}</option>`).join('');
-    return `<div class="brow" title="${esc(e.p)}"><span class="n">${i + 1}</span><span class="nm">${esc(e.p.split('/').pop())}</span>
-      <select class="in" title="조사할 브랜치" onchange="setBranch(${i}, this.value)">${opts}</select>
-      <button class="mini" onclick="addBranchRow(${i})" title="같은 프로젝트의 다른 브랜치를 함께 조사(브랜치 비교)">+</button>
-      <button class="mini" onclick="removeEntry(${i})" title="빼기">×</button></div>`;
+  if (!options.projects.length) { box.innerHTML = '<span class="md-empty">대상 프로젝트가 없습니다. 플랫폼 → 에이전트 설정 → 대상 프로젝트에 추가하세요.</span>'; return; }
+  // 프로젝트 순서는 그대로 두고(고를 때 칩이 자리를 옮기지 않게), 고른 것은 칩 안에 브랜치 칸을 붙인다.
+  // 같은 프로젝트를 브랜치만 달리해 여러 번 넣은 경우(비교)는 그 자리에 칩이 하나씩 더 생긴다.
+  box.innerHTML = options.projects.map(p => {
+    const name = esc(p.split('/').pop());
+    const idx = selEntries.map((e, i) => e.p === p ? i : -1).filter(i => i >= 0);
+    if (!idx.length) return `<button class="pc" onclick="toggleProj('${esc(p)}')" title="${esc(p)}">${name}</button>`;
+    return idx.map((i, k) => entryChip(selEntries[i], i, name, k > 0)).join('');
   }).join('');
+}
+// 고른 항목 칩: [번호 이름 | 브랜치 ▾]. 이름을 누르면 빼고, 브랜치 칸을 누르면 선택 목록(맨 아래 항목으로 같은 프로젝트의 다른 브랜치를 추가).
+function entryChip(e, i, name, extra) {
+  const c = branchCache[e.p]; const def = c && c.defaultBranch;
+  const names = c ? c.branches.slice() : []; if (e.b && !names.includes(e.b)) names.unshift(e.b);
+  const cur = e.b || def || (c && c.error ? '기본' : '…');
+  const opts = `<option value="">${def ? esc(def) + ' (기본)' : (c && c.error ? '기본 브랜치' : '불러오는 중…')}</option>`
+    + names.filter(n => n !== def).map(n => `<option value="${esc(n)}" ${n === e.b ? 'selected' : ''}>${esc(n)}</option>`).join('')
+    + '<option value="__add">＋ 다른 브랜치도 함께 조사 (비교)</option>';
+  return `<span class="pc sel" title="${esc(e.p)}${e.b ? ' @' + esc(e.b) : ''}">
+    <button class="pn" onclick="${extra ? `removeEntry(${i})` : `toggleProj('${esc(e.p)}')`}" title="${esc(e.p)} — 눌러서 빼기"><span class="o">${i + 1}</span>${name}</button>
+    <span class="pb ${e.b ? 'set' : ''}" title="조사할 브랜치: ${esc(cur)}${e.b ? '' : ' (기본)'}"><span class="bt">${esc(cur)}</span><span class="cv">▾</span>
+      <select aria-label="${name} 브랜치" onchange="pickBranch(${i}, this.value)">${opts}</select></span></span>`;
 }
 async function loadBranches(p) {
   if (branchCache[p]) return;
   branchCache[p] = { branches: [], loading: true };
   try { const d = await (await fetch('/api/research/branches?project=' + encodeURIComponent(p))).json(); branchCache[p] = { defaultBranch: d.defaultBranch, branches: d.branches || [], error: d.error }; }
   catch (e) { branchCache[p] = { branches: [], error: String(e) }; }
-  renderBranchRows();
+  renderChips();
 }
 function toggleProj(p) {
   if (selEntries.some(e => e.p === p)) selEntries = selEntries.filter(e => e.p !== p); else { selEntries.push({ p, b: null }); loadBranches(p); }
   saveEntries(); renderChips();
 }
-function setBranch(i, v) { selEntries[i].b = v || null; saveEntries(); }
-function addBranchRow(i) { selEntries.splice(i + 1, 0, { p: selEntries[i].p, b: null }); saveEntries(); renderChips(); }
+function pickBranch(i, v) {
+  if (v === '__add') selEntries.splice(i + 1, 0, { p: selEntries[i].p, b: null });   // 같은 프로젝트를 한 번 더(브랜치 비교) — 새 칩에서 브랜치를 고른다
+  else selEntries[i].b = v || null;
+  saveEntries(); renderChips();
+}
 function removeEntry(i) { selEntries.splice(i, 1); saveEntries(); renderChips(); }
 async function submitNew() {
   const q = $('qIn').value.trim();
