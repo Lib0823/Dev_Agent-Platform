@@ -541,6 +541,9 @@ public class ResearchService {
     }
 
     private void notifySelf(ResearchJob j) {
+        if (!client.notifyOn(MessengerService.NOTICE_RESEARCH)) {
+            return;                               // 메신저 알림을 껐다(알림함에는 finish 가 이미 남겼다)
+        }
         try {
             String link = "http://localhost:" + adminPort + "/research.html#r=" + j.getRootId();
             if (ResearchJob.DONE.equals(j.getState())) {

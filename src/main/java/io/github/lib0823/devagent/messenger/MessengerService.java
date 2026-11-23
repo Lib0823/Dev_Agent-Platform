@@ -8,7 +8,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * 메신저 애플리케이션 서비스(코어). 수집·멘션·요약·에이전트는 어댑터가 아니라 이 서비스를 쓴다.
@@ -86,6 +89,47 @@ public class MessengerService {
 
     public List<IncomingMessage> after(Room room, String sinceMessageId, int size) {
         return stats.track(() -> port.after(room, sinceMessageId, size));
+    }
+
+    // ---------------------------------------------------------------- 플랫폼 알림(유형별 켜고 끄기)
+
+    public static final String NOTICE_SUMMARY = "summary";
+    public static final String NOTICE_MENTION = "mention";
+    public static final String NOTICE_ISSUE = "issue";
+    public static final String NOTICE_RESEARCH = "research";
+    public static final String NOTICE_SYSTEM = "system";
+
+    /**
+     * 플랫폼이 스스로 자기방에 보내는 알림의 유형(키 → 화면 이름). 메신저 탭 "메신저 알림" 카드에서 유형별로 끌 수 있다.
+     * 사용자가 메신저에서 직접 친 명령(@AI …)의 답은 알림이 아니므로 여기에 넣지 않는다(항상 전송).
+     * 새 자기방 알림을 만들면 유형을 여기에 추가하고 {@link #notifySelf} 로 보낼 것 — sendToSelf 를 직접 쓰면 끌 수 없다.
+     */
+    public static final Map<String, String> NOTICES = notices();
+
+    private static Map<String, String> notices() {
+        Map<String, String> m = new LinkedHashMap<>();
+        m.put(NOTICE_SUMMARY, "방 요약");
+        m.put(NOTICE_MENTION, "멘션 초안");
+        m.put(NOTICE_ISSUE, "이슈 에이전트");
+        m.put(NOTICE_RESEARCH, "리서치");
+        m.put(NOTICE_SYSTEM, "시스템(시작·오류)");
+        return m;
+    }
+
+    /** 이 유형의 알림을 메신저로 보내는가(기본 켜짐). */
+    public boolean notifyOn(String kind) {
+        Set<String> off = settings.getMessengerNotifyOff();
+        return off == null || !off.contains(kind);
+    }
+
+    /** 플랫폼 알림을 자기방으로. 유형이 꺼져 있으면 보내지 않고 false(화면 알림함·각 탭에는 그대로 남는다). */
+    public boolean notifySelf(String kind, String message) {
+        if (!notifyOn(kind)) {
+            log.debug("[알림 꺼짐:{}] 전송 생략 <- {}", kind, preview(message));
+            return false;
+        }
+        sendToSelf(message);
+        return true;
     }
 
     // ---------------------------------------------------------------- 전송(안전 정책)

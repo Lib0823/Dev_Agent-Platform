@@ -221,6 +221,42 @@ public class AdminController {
         return Map.of("ok", true, "collect", settings.getCollectRoomKeys(), "auto", settings.getAutoRoomKeys());
     }
 
+    private static final Map<String, String> NOTICE_HINTS = Map.of(
+            MessengerService.NOTICE_SUMMARY, "수집한 방의 정기 요약. 꺼도 요약은 만들어져 이 화면 「최근 활동」에 남습니다.",
+            MessengerService.NOTICE_MENTION, "나를 부른 메시지의 답변 초안. 꺼도 초안은 「멘션 처리」에 남습니다(방에 직접 답은 그대로).",
+            MessengerService.NOTICE_ISSUE, "설계·리뷰 확인 요청, 진행·완료·한도 안내. 끄면 확인은 에이전트 화면과 알림함에서 합니다.",
+            MessengerService.NOTICE_RESEARCH, "메신저로 접수한 질문(@AI 질문 …)의 완료 알림. 결과는 리서치 탭에 있습니다.",
+            MessengerService.NOTICE_SYSTEM, "플랫폼 시작됨 · 오류 알림.");
+
+    /** 플랫폼이 자기방으로 보내는 알림의 유형별 켜짐 상태(메신저 탭 "메신저 알림" 카드). */
+    @GetMapping("/api/messenger-notify")
+    public Map<String, Object> messengerNotify() {
+        List<Map<String, Object>> kinds = new java.util.ArrayList<>();
+        MessengerService.NOTICES.forEach((key, label) -> {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("key", key);
+            m.put("label", label);
+            m.put("hint", NOTICE_HINTS.getOrDefault(key, ""));
+            m.put("on", client.notifyOn(key));
+            kinds.add(m);
+        });
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("connected", !"none".equals(client.provider()));
+        out.put("kinds", kinds);
+        return out;
+    }
+
+    /** 알림 유형 하나를 켜거나 끈다(재시작 불필요, 다음 알림부터 적용). */
+    @PostMapping("/api/messenger-notify")
+    public Map<String, Object> setMessengerNotify(@RequestParam String key, @RequestParam boolean on) {
+        String label = MessengerService.NOTICES.get(key);
+        if (label == null) {
+            return Map.of("ok", false, "result", "알 수 없는 알림 유형: " + key);
+        }
+        settings.setMessengerNotify(key, on);
+        return Map.of("ok", true, "result", "메신저 알림 「" + label + "」 " + (on ? "켬" : "끔 — 화면(알림함·각 탭)에서만 확인합니다"));
+    }
+
     @GetMapping("/api/status")
     public Map<String, Object> status() {
         Set<String> auto = settings.getAutoRoomKeys();

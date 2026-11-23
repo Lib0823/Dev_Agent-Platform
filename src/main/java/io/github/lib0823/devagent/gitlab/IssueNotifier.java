@@ -55,7 +55,7 @@ public class IssueNotifier {
         String selfKey = "self:" + client.selfId();
         boolean collected = bot.collect().mode() == BotProperties.Collect.Mode.ALL
                 || settings.getCollectRoomKeys().contains(selfKey) || settings.getAutoRoomKeys().contains(selfKey);
-        if (!collected) {
+        if (!collected && client.notifyOn(MessengerService.NOTICE_ISSUE)) {
             log.warn("자기방({}) 수집이 꺼져 있어 이슈 에이전트가 명령/확인 답변을 받을 수 없습니다 — 관리 페이지에서 자기방 '수집'을 켜세요", selfKey);
             try {
                 client.connect();
@@ -82,6 +82,9 @@ public class IssueNotifier {
     /** 자기방 전송(길면 분할). 전송 실패는 로그만(상태 전이는 이미 DB 에 저장됨). */
     public void sendSelf(String text) {
         notifications.addIssue(text);   // 화면 알림함(메신저와 무관하게 남는다)
+        if (!client.notifyOn(MessengerService.NOTICE_ISSUE)) {
+            return;                     // 메신저 알림을 껐다: 확인·진행은 에이전트 화면과 알림함에서
+        }
         int max = Math.max(500, props.agent().maxMessageChars());
         List<String> parts = new ArrayList<>();
         String rest = text;

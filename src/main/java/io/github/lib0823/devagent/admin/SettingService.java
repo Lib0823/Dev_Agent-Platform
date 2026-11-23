@@ -142,6 +142,24 @@ public class SettingService {
         store(KEY_AUTO_ROOMS, join(keys));
     }
 
+    private static final String KEY_NOTIFY_OFF = "messenger_notify_off";
+
+    /** 메신저(자기방)로 보내지 않기로 한 플랫폼 알림 유형(MessengerService.NOTICES 의 키). 기본은 빈 집합 = 전부 보냄. */
+    public Set<String> getMessengerNotifyOff() {
+        String v = cached(KEY_NOTIFY_OFF);
+        return v == null ? new LinkedHashSet<>() : parse(v);
+    }
+
+    public void setMessengerNotify(String kind, boolean on) {
+        Set<String> off = getMessengerNotifyOff();
+        if (on) {
+            off.remove(kind);
+        } else {
+            off.add(kind);
+        }
+        store(KEY_NOTIFY_OFF, String.join(",", off));
+    }
+
     /** 수집 대상(자기방 외 추가) 방 키 집합. DB 값이 없으면 빈 집합. */
     public Set<String> getCollectRoomKeys() {
         String v = cached(KEY_COLLECT_ROOMS);

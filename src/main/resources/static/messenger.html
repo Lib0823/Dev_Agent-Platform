@@ -12,6 +12,10 @@
 <style>
   .grid.two { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); }
   @media (max-width: 1100px) { .grid.two { grid-template-columns: 1fr; } }
+  .nrow { display: flex; align-items: center; gap: 14px; padding: 10px 2px; border-bottom: 1px solid var(--line); cursor: pointer; }
+  .nrow:last-child { border-bottom: none; }
+  .nrow .nl { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .nrow .nl b { font-size: 13.5px; font-weight: 600; }
 </style>
 </head>
 <body>
@@ -47,6 +51,12 @@
       </div>
       <div class="col">
         <section class="card">
+          <h2><span class="ic" id="icBell"></span>메신저 알림<span class="sp"></span><span class="hint" id="notifyCount"></span></h2>
+          <div class="hint" style="margin-bottom:6px">플랫폼이 <b>내 자기방</b>으로 보내는 알림을 유형별로 켜고 끕니다. 꺼도 내용은 화면(알림함·각 탭)에 그대로 남습니다.
+            메신저에서 직접 친 <b>@AI 명령의 답</b>은 알림이 아니라서 항상 보냅니다.</div>
+          <div id="notifyKinds"><div class="skel" style="margin:12px 2px"></div><div class="skel" style="margin:12px 2px;width:70%"></div></div>
+        </section>
+        <section class="card">
           <h2><span class="ic" id="icClock"></span>최근 활동<span class="sp"></span>
             <div class="seg"><button class="tab sel" data-r="sum">요약</button><button class="tab" data-r="men">멘션 처리</button></div></h2>
           <div class="pane sel" id="r-sum"><div class="md-empty">불러오는 중…</div></div>
@@ -63,7 +73,7 @@
 <script>
 UI.topbar('messenger', '메신저');
 UI.pollAgentChip();
-loadStatus(); loadRooms(); loadRecent();
+loadStatus(); loadRooms(); loadRecent(); loadNotify();
 UI.every(loadStatus, 15000); UI.every(loadRecent, 60000);
 </script>
 </body>

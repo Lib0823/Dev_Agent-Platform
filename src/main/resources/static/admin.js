@@ -3,7 +3,7 @@ const { $, esc, fmt, ago, num, KOR, cls, isActive, I, toast } = UI;
 /** 요소가 이 화면에 있을 때만 이벤트를 건다(홈·메신저·플랫폼이 이 파일을 함께 쓴다). */
 function on(id, ev, fn) { const e = $(id); if (e) e.addEventListener(ev, fn); }
 
-for (const [id, ic] of [['icRooms','rooms'],['icSearch','search'],['icSearch2','search'],['icSearch3','search'],['icMcp','pulse'],['icPlat','branch'],['icSys','pulse'],['icSkill','book'],['icWarn','warn'],['icClock','clock'],['icAgent','agent'],['icArrow','arrow'],['icTerm','terminal'],['icPlus','plus'],['icBook','book'],['icRefresh','refresh']]) { const e=$(id); if (e) e.innerHTML = I[ic]; }
+for (const [id, ic] of [['icRooms','rooms'],['icBell','bell'],['icSearch','search'],['icSearch2','search'],['icSearch3','search'],['icMcp','pulse'],['icPlat','branch'],['icSys','pulse'],['icSkill','book'],['icWarn','warn'],['icClock','clock'],['icAgent','agent'],['icArrow','arrow'],['icTerm','terminal'],['icPlus','plus'],['icBook','book'],['icRefresh','refresh']]) { const e=$(id); if (e) e.innerHTML = I[ic]; }
 
 let ROOMS = [];
 
@@ -71,6 +71,25 @@ async function save() {
 on('filter', 'input', renderRooms);
 
 // ---------------------------------------------------------------- recent
+// ---------- 메신저 알림(유형별 켜고 끄기) ----------
+async function loadNotify() {
+  const el = $('notifyKinds'); if (!el) return;
+  let d; try { d = await (await fetch('/api/messenger-notify')).json(); } catch (e) { return; }
+  UI.set(el, (d.connected ? '' : '<div class="callout info" style="margin-bottom:10px"><span>메신저가 연결돼 있지 않아 지금은 어떤 알림도 보내지 않습니다. 설정은 연결 뒤에 적용됩니다.</span></div>')
+    + d.kinds.map(k => `<label class="nrow"><span class="nl"><b>${esc(k.label)}</b><span class="hint">${esc(k.hint)}</span></span>
+      <span class="sw"><input type="checkbox" data-notify="${esc(k.key)}" ${k.on ? 'checked' : ''}><i></i></span></label>`).join(''));
+  const n = d.kinds.filter(k => k.on).length;
+  $('notifyCount').textContent = n === d.kinds.length ? '모두 켜짐' : n === 0 ? '모두 꺼짐' : n + '/' + d.kinds.length + ' 켜짐';
+}
+on('notifyKinds', 'change', async e => {
+  const t = e.target; if (!t.dataset || !t.dataset.notify) return;
+  try {
+    const r = await (await fetch('/api/messenger-notify?key=' + encodeURIComponent(t.dataset.notify) + '&on=' + t.checked, { method: 'POST' })).json();
+    toast(r.result, r.ok ? 'ok' : 'err');
+  } catch (err) { toast('저장 실패', 'err'); }
+  loadNotify();
+});
+
 async function loadRecent() {
   let r; try { r = await (await fetch('/api/recent')).json(); } catch(e) { return; }
   $('r-sum').innerHTML = (r.summaries||[]).map(s =>

@@ -38,7 +38,7 @@ public class AlertService {
     @EventListener(ApplicationReadyEvent.class)
     public void onReady() {
         notifications.add("system", "info", "Dev Agent 시작됨", null, "/platform.html");
-        if (!bot.ops().notifyOnStartup()) {
+        if (!bot.ops().notifyOnStartup() || !client.notifyOn(MessengerService.NOTICE_SYSTEM)) {
             return;
         }
         try {
@@ -59,6 +59,9 @@ public class AlertService {
         }
         lastAlertMs = now;
         notifications.add("system", "err", "오류: " + context, String.valueOf(t), "/platform.html");
+        if (!client.notifyOn(MessengerService.NOTICE_SYSTEM)) {
+            return;
+        }
         try {
             client.connect();
             client.sendToSelf("[봇 오류] " + context + " — " + now() + "\n" + String.valueOf(t));

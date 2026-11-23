@@ -50,7 +50,7 @@ LLM 호출은 전부 **Claude Code CLI(headless)** 다. 채팅은 warm stream-js
 ## 버전 (11-17)
 
 - `build.gradle` 의 `version` 한 곳(major.minor.patch) → `buildInfo()` → `/api/system/status` → 상단바 배터리 왼쪽 `v1.1.0`·플랫폼 시스템 카드·배포 파일 이름. 시작은 1.0.0(첫 실행 파일 배포), 알림함부터 1.1.0.
-- 플랫폼 관리(렌치 버튼 채팅 창)부터 1.8.0.
+- 플랫폼 관리(렌치 버튼 채팅 창)부터 1.8.0, 메신저 알림 유형별 끄기부터 1.9.0.
 - 올리는 기준: **major** = 기존 설치가 그대로는 안 도는 변경(설정 키·DB 스키마 비호환, 실행 방식 변경) / **minor** = 기능 추가(화면·API·설정 추가, 하위 호환) / **patch** = 버그 수정·문구·내부 정리. 사용자에게 보이는 변경을 커밋할 때 같이 올린다(문서만 고친 커밋은 그대로).
 
 ## 플랫폼 관리 (11-23, 1.8.0)
@@ -66,6 +66,7 @@ LLM 호출은 전부 **Claude Code CLI(headless)** 다. 채팅은 warm stream-js
 ## 알림함 (11-17)
 
 - 방향: **메신저는 활용하되 의존하지 않는다.** 사용자가 알아야 할 일은 메신저 전송과 별개로 `NotificationService.add(kind, level, title, body, link)` 로 남긴다(실패해도 예외 없음). 현재 기록 지점: `IssueNotifier.sendSelf`(이슈 안내문 → `addIssue`, 첫 줄이 제목, 수준은 `issueLevel` 문구 규칙), `ResearchService.finish`(자기방 알림 여부와 무관), `AlertService`(시작·오류). 새 기능이 자기방으로만 알리게 만들지 말 것.
+- **메신저 알림 유형별 끄기(1.9.0)**: 플랫폼이 스스로 자기방에 보내는 알림은 `MessengerService.NOTICES`(summary·mention·issue·research·system)의 유형을 달아 `notifySelf(kind, text)` 로 보내거나, 전송 전에 `notifyOn(kind)` 를 확인한다(꺼짐 목록은 `bot_setting.messenger_notify_off`, 기본 전부 켜짐, 메신저 탭 "메신저 알림" 카드 · `/api/messenger-notify`). **새 자기방 알림을 `sendToSelf` 로 직접 보내지 말 것** — 사용자가 끌 수 없게 된다. 사용자가 메신저에서 친 명령(`@AI …`)의 답은 알림이 아니므로 `sendToSelf` 그대로(항상 전송). 꺼도 내용은 남아야 한다: 요약·멘션 초안은 DB(메신저 탭), 이슈·리서치·시스템은 알림함.
 - 요약·멘션 초안 같은 **대화 내용은 알림함에 넣지 않는다**(메신저 화면 소관).
 - 서버는 읽음 상태를 모른다: 최근 60건을 메모리 캐시로 돌려주고(추가 때만 다시 읽음, 화면이 1분마다 호출) 읽음·비우기 시각은 브라우저 localStorage `da-notices`(`seen`/`cleared`/토스트 `items`)가 기억한다. `UI.toast()` 는 자동으로 기록되므로 화면 코드는 할 일이 없다.
 

@@ -156,7 +156,7 @@ public class MentionService {
     private void deliverDraft(ChatMessageRow c, String draft, boolean sensitive) {
         String header = "[멘션 초안] " + roomName(c) + " / " + nvl(c.getSenderName(), "?")
                 + (sensitive ? " (민감요청 보류)" : "");
-        client.sendToSelf(header + "\n> " + oneLine(c.getBody()) + "\n---\n" + draft);
+        client.notifySelf(MessengerService.NOTICE_MENTION, header + "\n> " + oneLine(c.getBody()) + "\n---\n" + draft);
     }
 
     private void record(ChatMessageRow c, String mode, String replyText, String skipReason) {

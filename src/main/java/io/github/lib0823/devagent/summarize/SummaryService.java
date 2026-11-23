@@ -101,9 +101,9 @@ public class SummaryService {
         summaryMapper.insert(s);
 
         String header = "[방 요약] " + room.getRoomName() + " (" + msgs.size() + "건)";
-        client.sendToSelf(header + "\n" + summaryText);
+        boolean sent = client.notifySelf(MessengerService.NOTICE_SUMMARY, header + "\n" + summaryText);
 
-        log.info("요약 완료 '{}' — {}건, 전달됨", room.getRoomName(), msgs.size());
+        log.info("요약 완료 '{}' — {}건, {}", room.getRoomName(), msgs.size(), sent ? "전달됨" : "메신저 알림 꺼짐(화면에만)");
         return true;
     }
 
