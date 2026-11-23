@@ -348,6 +348,43 @@ public class ResearchService {
         }
     }
 
+    /**
+     * 첨부 이미지 정리: 스레드가 끝나고(진행 중인 항목 없음, 마지막 항목 종료 기준) {@code research.attachment-keep-days} 일이 지난 질의의
+     * 이미지 파일을 지운다. 후속 질문을 하면 기준 시각이 그만큼 밀린다. 질문·결과 문서는 그대로 두고 파일과 첨부 표시만 없앤다.
+     */
+    @Scheduled(fixedDelayString = "21600000", initialDelayString = "180000")
+    void sweepAttachments() {
+        int days = props.attachmentKeepDays();
+        if (!enabled() || days <= 0) {
+            return;
+        }
+        OffsetDateTime cutoff = OffsetDateTime.now().minusDays(days);
+        int removed = 0;
+        for (long id : attachments.jobIds()) {
+            try {
+                ResearchJob j = jobs.find(id);
+                boolean expired;
+                if (j == null) {
+                    expired = attachments.folderTime(id) < cutoff.toInstant().toEpochMilli();   // 기록이 없는 폴더: 폴더 나이로
+                } else {
+                    OffsetDateTime doneAt = jobs.threadDoneAt(j.getRootId());
+                    expired = doneAt != null && doneAt.isBefore(cutoff);
+                }
+                if (expired && attachments.delete(id)) {
+                    removed++;
+                    if (j != null) {
+                        jobs.setAttachments(id, null);
+                    }
+                }
+            } catch (RuntimeException e) {
+                log.warn("질의 #{} 첨부 정리 실패(다음 주기에 다시): {}", id, e.toString());
+            }
+        }
+        if (removed > 0) {
+            log.info("리서치 첨부 이미지 정리: {}건(스레드 종료 후 {}일 경과)", removed, days);
+        }
+    }
+
     private void runNext() {
         if (runningId.get() != null) {
             return;

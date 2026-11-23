@@ -54,6 +54,16 @@ public interface ResearchJobMapper {
             """)
     void ensureColumns();
 
+    /**
+     * 스레드가 끝난 시각: 진행 중(NEW/RUNNING)인 항목이 하나라도 있으면 NULL, 아니면 항목들의 종료 시각 중 가장 늦은 것.
+     * 후속 질문을 하면 그만큼 뒤로 밀린다(첨부 이미지 정리 기준).
+     */
+    @Select("""
+            SELECT CASE WHEN bool_or(state IN ('NEW', 'RUNNING')) THEN NULL ELSE MAX(COALESCE(finished_at, updated_at)) END
+            FROM research_job WHERE root_id = #{rootId}
+            """)
+    java.time.OffsetDateTime threadDoneAt(@Param("rootId") long rootId);
+
     /** 첨부 이미지 이름 기록(접수 직후 한 번). */
     @Update("UPDATE research_job SET attachments = #{attachments} WHERE id = #{id}")
     int setAttachments(@Param("id") long id, @Param("attachments") String attachments);

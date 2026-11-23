@@ -259,6 +259,7 @@ research:
   model: ${RESEARCH_MODEL:}                      # 비우면 관리 페이지 '기획' 모델(질의마다 화면에서 고를 수 있음)
   effort: ${RESEARCH_EFFORT:}
   max-result-chars: ${RESEARCH_MAX_RESULT_CHARS:60000}
+  attachment-keep-days: ${RESEARCH_ATTACHMENT_KEEP_DAYS:7}   # 첨부 이미지: 스레드가 끝나고(마지막 항목 종료) 이 일수가 지나면 파일 삭제. 0 = 지우지 않음
   verify: ${RESEARCH_VERIFY:true}                 # 2차 검증 기본값: 독립 검증자(테스트 모델)가 문서를 소스와 대조 → 지적이 있으면 작성 세션이 1회 수정
 
 # 플랫폼 관리(자기 유지보수): 상단바 렌치 버튼의 채팅 창 → 이 플랫폼의 소스 저장소에서 도는 Claude 세션(버그 확인·수정·테스트/빌드·커밋·스킬 등록).

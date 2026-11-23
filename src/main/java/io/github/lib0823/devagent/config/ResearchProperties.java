@@ -15,7 +15,8 @@ public record ResearchProperties(
         String model,            // 기본 모델(비우면 관리 페이지 '기획' 모델)
         String effort,           // 기본 노력(비우면 '기획' 노력)
         int maxResultChars,      // 결과 문서 저장 상한(초과분은 잘라 저장)
-        boolean verify           // 2차 검증 기본값(질의마다 화면에서 끌 수 있음)
+        boolean verify,          // 2차 검증 기본값(질의마다 화면에서 끌 수 있음)
+        int attachmentKeepDays   // 첨부 이미지 보관 일수: 스레드가 끝난 뒤 이만큼 지나면 파일을 지운다(0 이하 = 지우지 않음)
 ) {
     public long timeoutOr() {
         return timeoutMs > 0 ? timeoutMs : 30 * 60_000L;
