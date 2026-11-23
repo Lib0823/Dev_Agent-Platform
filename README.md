@@ -38,7 +38,7 @@
 
 탭을 옮길 때 화면을 새로 읽지 않습니다 — 한 번 연 탭은 뒤에 그대로 두고 보이기만 바꾸므로 선택한 세션·스레드와 실시간 로그가 유지되고, 가려진 탭은 주기 조회를 쉽니다. 에이전트·리서치 탭은 왼쪽 목록과 본문 사이를 끌어 폭을 조절할 수 있고(더블클릭 = 기본 폭), 선택 상자는 항목이 많으면 검색칸이 붙습니다.
 
-상단바 오른쪽 배터리 옆의 `v1.7.2` 이 실행 중인 버전입니다(major.minor.patch — 호환이 깨지는 변경 / 기능 추가 / 수정). 플랫폼 탭은 시스템 · 에이전트 설정/스킬/사내 문서 · 운영 MCP/연동 세 열로 배치됩니다.
+상단바 오른쪽 배터리 옆의 `v1.12.0` 이 실행 중인 버전입니다(major.minor.patch — 호환이 깨지는 변경 / 기능 추가 / 수정). 플랫폼 탭은 시스템 · 에이전트 설정/스킬/사내 문서 · 운영 MCP/연동 세 열로 배치됩니다.
 
 **알림함** — 모든 화면 상단의 종 버튼(Alt+N)을 누르면 작은 패널에 알림이 시간순으로 쌓여 있습니다. 메신저와 무관한 플랫폼 자체 알림입니다(메신저가 없어도 동작).
 
@@ -128,6 +128,7 @@
 - **사내 문서 참고(RAG)**: MkDocs `search_index.json` 을 기동 시 + 매일 06:30 적재(`doc_chunk`), 질문과 관련 섹션이 있을 때만 상위 K 섹션을 프롬프트에 넣고 출처 URL 을 답에 붙입니다. 임베딩 API 가 없어 Postgres 키워드 스코어링(제목 가중, 조사 제거)으로 구현. 점검: `GET /api/docs-status`, `POST /api/docs-refresh`, `GET /api/docs-search?q=`.
 - **운영 MCP 조회**: 자기방(또는 직접응답 방)에서 `@AI 운영 <질문>` 이나 운영 키워드가 든 질문은 `OpsQueryService` 가 one-shot `claude -p`(sonnet/medium) 로 opensearch·postgres·k3s-ops **읽기 전용** 도구를 써서 실제 데이터를 조회해 답합니다(10~60초, 접수 안내 선전송). 설정 파일 `work/mcp-servers.json` 은 기동 시 생성되고 토큰은 env 로만 전달됩니다.
 - **응답 속도**: `claude -p` 콜드스타트 ~20s → 플래그 최적화 ~9.6s → **warm 상주 ~1.4s**. 헬스체크 `GET /api/llm-test?prompt=`.
+- **메신저 알림 끄기**: 플랫폼이 스스로 자기방에 보내는 알림은 메신저 탭 "메신저 알림" 카드에서 유형별(방 요약 · 멘션 초안 · 이슈 · 리서치 · 시스템)로 끌 수 있습니다. 꺼도 내용은 남습니다 — 요약·멘션 초안은 메신저 탭에, 이슈·리서치·시스템은 알림함에. 메신저에서 직접 친 `@AI` 명령의 답은 알림이 아니므로 항상 갑니다.
 
 ---
 
@@ -227,6 +228,7 @@ Spring MVC + JSP 처럼 WAR 가 떠야 화면을 볼 수 있는 Maven 프로젝�
 
 - **저장소 · 브랜치**: 대상 프로젝트(관리 페이지 "대상 프로젝트" 중 선택, 여러 개 가능)마다 **브랜치를 고를 수 있습니다**(기본은 기본 브랜치). 같은 프로젝트를 브랜치만 달리해 두 번 넣으면 브랜치 간 비교 질의가 됩니다. 메신저에서는 `@AI 질문 batch@develop: …`. 고른 브랜치를 `work/<grp__repo>__ref/<branch>` detached worktree(참고 저장소와 같은 방식)로 받아 **읽기 전용**으로 읽습니다. 이슈 세션의 worktree 와 겹치지 않고, 실행 뒤 변경이 생겼으면 되돌립니다.
 - **세션**: 첫 질문은 새 Claude 세션(분석 도구 Read/Grep/Glob/git log + 사내 문서 검색 + 운영 MCP 읽기), **후속 질문은 같은 세션을 `--resume`** 해 이미 읽은 코드 맥락을 재사용합니다(빠르고 토큰이 적음). 질의마다 모델/노력을 고를 수 있고(기본 '기획' 모델), 상한 30분/60턴(`RESEARCH_TIMEOUT_MS`/`RESEARCH_MAX_TURNS`).
+- **이미지 첨부**: 질문(새 질문·후속 질문)에 화면 캡처 같은 이미지를 붙여넣기·끌어놓기·버튼으로 최대 6장(png/jpg/gif/webp, 장당 10MB) 붙일 수 있고, 모델이 파일을 직접 열어 봅니다. 스레드에 썸네일로 남고, 스레드가 끝난 뒤 7일(`RESEARCH_ATTACHMENT_KEEP_DAYS`, 0 = 지우지 않음)이 지나면 파일을 지웁니다. 루틴·메신저 접수에는 없습니다.
 - **결과**: 고정 틀의 마크다운 문서(`# 제목` / `## 요약` / `## 내용`(표) / `## 근거`(파일 경로) / `## 미확인·주의`). 리서치 탭에서 표로 렌더링, 복사·`.md` 내려받기. 메신저로 접수한 질문은 완료 시 자기방에 요약 + 링크를 보냅니다.
 - **실행**: 이슈 워커와 분리된 단일 워커가 순서대로 처리하고, Claude 사용량 한도 중에는 대기열에 두었다가 리셋 뒤 자동 시작합니다. 활동 로그는 이슈 대시보드와 같은 SSE/이벤트 저장소를 공유합니다(`issue_event.session_id = 10억 + 질의 id`). 데이터는 `research_job`.
 
@@ -274,7 +276,7 @@ Spring MVC + JSP 처럼 WAR 가 떠야 화면을 볼 수 있는 Maven 프로젝�
 ### MCP 서버 · 스킬 관리 (플랫폼 탭)
 
 - **MCP 서버**: 내장 3개(opensearch · postgres · k3s-ops, `.env` 로 관리) 외에 "운영 MCP" 카드에서 서버를 등록·수정·삭제합니다(http / sse / stdio). 저장하면 `work/mcp-servers.json` 을 다시 만들어 다음 실행부터 운영 질의와 에이전트에 반영됩니다(재시작 불필요). **비밀값은 저장하지 않습니다** — 인증·토큰·키류 헤더는 `${ENV_NAME}` 자리표시자만 받고 실제 값은 `.env` 에 둡니다(없으면 화면에 "env 없음" 표시). 허용 도구를 비우면 서버의 모든 도구가 허용되므로, 변경 도구가 있는 서버는 조회 도구 이름만 적습니다.
-- **스킬**: 팀 코딩 규칙·커밋 규칙·조사 문서 양식 같은 재사용 지침을 "스킬" 카드에서 등록·수정·삭제합니다(이름 · 언제 쓰는지 한 줄 · 적용 단계 · 본문). 해당 단계(분석·설계 / 코드 수정 / 검증 / 질의)의 시스템 프롬프트에 실리며, 1,500자 이하는 본문 그대로, 넘으면 설명만 싣고 필요할 때 `work/skills/<이름>/SKILL.md` 를 읽게 합니다. Claude Code 의 네이티브 스킬 대신 플랫폼이 관리하므로 다른 LLM 구현체로 바꿔도 유지됩니다. 처음 기동할 때 **기본 스킬** 두 개가 들어 있습니다 — `regression-test`(버그 수정이면 설계에 재현 테스트를 넣고 추가·확인), `new-dependency`(라이브러리 추가·버전 변경은 설계의 「확인 필요」로 승인받기). 한 번 넣은 뒤로는 일반 스킬과 같아서 고치거나 끄거나 지워도 플랫폼이 되돌리지 않으며, 지운 것은 「기본 스킬 다시 넣기」로 다시 받을 수 있습니다(있는 스킬은 덮어쓰지 않음).
+- **스킬**: 팀 코딩 규칙·커밋 규칙·조사 문서 양식 같은 재사용 지침을 "스킬" 카드에서 등록·수정·삭제합니다(이름 · 언제 쓰는지 한 줄 · 적용 단계 · 본문). 해당 단계(분석·설계 / 코드 수정 / 검증 / 질의 / 플랫폼 관리)의 시스템 프롬프트에 실리며, 1,500자 이하는 본문 그대로, 넘으면 설명만 싣고 필요할 때 `work/skills/<이름>/SKILL.md` 를 읽게 합니다. Claude Code 의 네이티브 스킬 대신 플랫폼이 관리하므로 다른 LLM 구현체로 바꿔도 유지됩니다. 처음 기동할 때 **기본 스킬** 두 개가 들어 있습니다 — `regression-test`(버그 수정이면 설계에 재현 테스트를 넣고 추가·확인), `new-dependency`(라이브러리 추가·버전 변경은 설계의 「확인 필요」로 승인받기). 한 번 넣은 뒤로는 일반 스킬과 같아서 고치거나 끄거나 지워도 플랫폼이 되돌리지 않으며, 지운 것은 「기본 스킬 다시 넣기」로 다시 받을 수 있습니다(있는 스킬은 덮어쓰지 않음).
 
 | 스킬 | 운영 MCP |
 |---|---|
@@ -377,7 +379,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File install-autostart.ps1   # �
 | `GITLAB_AGENT_MODEL` / `GITLAB_AGENT_EFFORT` / `GITLAB_AGENT_FIX_TOOLS` / `GITLAB_AGENT_TEST_HINT` | 코딩용 모델·노력 초기값(관리 페이지 값이 우선) · 수정 단계 허용 명령 · 검증 명령 안내 |
 | `GITLAB_AGENT_TIMEOUT_MS` / `GITLAB_AGENT_MAX_TURNS` / `GITLAB_AGENT_FIX_TIMEOUT_MS` / `GITLAB_AGENT_FIX_MAX_TURNS` / `GITLAB_AGENT_IDLE_TIMEOUT_MS` | 분석 60분/80턴 · 개발 4시간/600턴 · 무응답 20분 |
 | `GITLAB_VERIFY_ENABLED` / `GITLAB_VERIFY_MAX_RETRIES` / `GITLAB_VERIFY_REVIEWER` / `GITLAB_VERIFY_MODEL` / `GITLAB_VERIFY_EFFORT` / `GITLAB_VERIFY_COMMANDS` / `GITLAB_VERIFY_REVIEWER_TIMEOUT_MS` | 검증 단계 · 자동 재수정 2회 · 독립 리뷰어 · 리뷰어 모델/노력 · 프로젝트별 검사 명령 · 리뷰어 상한 60분 |
-| `RESEARCH_ENABLED` / `RESEARCH_TIMEOUT_MS` / `RESEARCH_MAX_TURNS` / `RESEARCH_MODEL` / `RESEARCH_EFFORT` / `RESEARCH_VERIFY` | 질의 워크플로우 · 질문 1건 상한 30분/60턴 · 기본 모델/노력(비우면 기획 모델) · 2차 검증 기본값 |
+| `RESEARCH_ENABLED` / `RESEARCH_TIMEOUT_MS` / `RESEARCH_MAX_TURNS` / `RESEARCH_MODEL` / `RESEARCH_EFFORT` / `RESEARCH_VERIFY` / `RESEARCH_ATTACHMENT_KEEP_DAYS` | 질의 워크플로우 · 질문 1건 상한 30분/60턴 · 기본 모델/노력(비우면 기획 모델) · 2차 검증 기본값 · 첨부 이미지 보관 일수(기본 7) |
 | `MAINTAIN_ENABLED` / `MAINTAIN_REPO_DIR` / `MAINTAIN_MODEL` / `MAINTAIN_EFFORT` / `MAINTAIN_TIMEOUT_MS` / `MAINTAIN_MAX_TURNS` / `MAINTAIN_TOOLS` | 플랫폼 관리(렌치 버튼 채팅 창) · 소스 저장소 경로(비우면 실행 디렉터리가 소스 저장소일 때만 켜짐) · 기본 모델/노력(비우면 '개발') · 요청 1건 상한 2시간/300턴 · 허용 도구(`git push` 는 넣어도 금지) |
 | `PREVIEW_ENABLED` / `PREVIEW_LOGIN_ID` / `PREVIEW_LOGIN_PW` / `PREVIEW_START_TIMEOUT_MS` | 로컬 프리뷰 · 로그인 테스트 계정 · 기동 대기 상한(15분) |
 | `PLATFORM_MESSENGER` / `PLATFORM_CHAT_MODEL` / `PLATFORM_CODING_AGENT` / `PLATFORM_KNOWLEDGE` | 포트 구현체 선택(기본 none / claude-cli / claude-cli / mkdocs-keyword) |
