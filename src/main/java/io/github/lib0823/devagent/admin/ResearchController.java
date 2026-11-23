@@ -2,12 +2,15 @@ package io.github.lib0823.devagent.admin;
 
 import io.github.lib0823.devagent.research.ResearchJob;
 import io.github.lib0823.devagent.research.ResearchService;
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -70,11 +73,13 @@ public class ResearchController {
                                       @RequestParam(required = false) String effort,
                                       @RequestParam(required = false) Long parentId,
                                       @RequestParam(required = false) Boolean verify,
-                                      @RequestParam(required = false) String kind) {
+                                      @RequestParam(required = false) String kind,
+                                      @RequestParam(required = false) String attachments) {
         Map<String, Object> out = new LinkedHashMap<>();
         try {
             List<String> ps = projects == null ? List.of() : Arrays.stream(projects.split(",")).map(String::strip).filter(s -> !s.isEmpty()).toList();
-            ResearchJob j = research.submit(question, ps, model, effort, parentId, false, "dashboard", verify, kind);
+            List<String> imgs = attachments == null ? List.of() : Arrays.stream(attachments.split(",")).map(String::strip).filter(s -> !s.isEmpty()).toList();
+            ResearchJob j = research.submit(question, ps, model, effort, parentId, false, "dashboard", verify, kind, imgs);
             out.put("ok", true);
             out.put("id", j.getId());
             out.put("rootId", j.getRootId());
@@ -84,6 +89,40 @@ public class ResearchController {
             out.put("result", e.getMessage());
         }
         return out;
+    }
+
+    /** 질문에 붙일 이미지 한 장 올리기(본문 = 파일 바이트). 돌려준 name 을 접수 때 attachments 로 보낸다. */
+    @PostMapping("/api/research/attach")
+    public Map<String, Object> attach(@RequestBody(required = false) byte[] data, HttpServletRequest req) {
+        Map<String, Object> out = new LinkedHashMap<>();
+        if (SystemController.foreign(req)) {
+            out.put("ok", false);
+            out.put("result", "이 화면에서만 요청할 수 있습니다.");
+            return out;
+        }
+        try {
+            out.put("name", research.stageAttachment(data));
+            out.put("ok", true);
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            out.put("ok", false);
+            out.put("result", e.getMessage());
+        }
+        return out;
+    }
+
+    /** 질문에 첨부된 이미지 보기. */
+    @GetMapping("/api/research/{id}/attach/{name}")
+    public ResponseEntity<FileSystemResource> attachment(@PathVariable long id, @PathVariable String name) {
+        java.nio.file.Path p = research.attachmentFile(id, name);
+        if (p == null) {
+            return ResponseEntity.notFound().build();
+        }
+        String ext = name.substring(name.lastIndexOf('.') + 1);
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType("image/" + ("jpg".equals(ext) ? "jpeg" : ext)))
+                .header(HttpHeaders.CACHE_CONTROL, "private, max-age=86400")
+                .header("X-Content-Type-Options", "nosniff")
+                .body(new FileSystemResource(p));
     }
 
     @PostMapping("/api/research/{id}/abort")

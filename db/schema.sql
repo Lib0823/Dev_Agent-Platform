@@ -159,6 +159,7 @@ CREATE TABLE IF NOT EXISTS research_job (
     verify_state       VARCHAR(16),                      -- PASS / FIXED / FAIL / SKIPPED
     verify_md          TEXT,                             -- 검증자 보고서
     kind               VARCHAR(16)  NOT NULL DEFAULT 'doc', -- 결과 형식: doc(조사 문서) / issue(GitLab 이슈 초안)
+    attachments        TEXT,                             -- 첨부 이미지 이름(쉼표 구분). 파일은 작업 디렉터리 research-attach/<id>/
     created_at         TIMESTAMPTZ  NOT NULL DEFAULT now(),
     started_at         TIMESTAMPTZ,
     finished_at        TIMESTAMPTZ,

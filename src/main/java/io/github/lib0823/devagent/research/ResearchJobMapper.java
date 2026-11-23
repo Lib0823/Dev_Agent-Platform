@@ -49,9 +49,14 @@ public interface ResearchJobMapper {
                 ADD COLUMN IF NOT EXISTS verify BOOLEAN NOT NULL DEFAULT false,
                 ADD COLUMN IF NOT EXISTS verify_state VARCHAR(16),
                 ADD COLUMN IF NOT EXISTS verify_md TEXT,
-                ADD COLUMN IF NOT EXISTS kind VARCHAR(16) NOT NULL DEFAULT 'doc'
+                ADD COLUMN IF NOT EXISTS kind VARCHAR(16) NOT NULL DEFAULT 'doc',
+                ADD COLUMN IF NOT EXISTS attachments TEXT
             """)
     void ensureColumns();
+
+    /** 첨부 이미지 이름 기록(접수 직후 한 번). */
+    @Update("UPDATE research_job SET attachments = #{attachments} WHERE id = #{id}")
+    int setAttachments(@Param("id") long id, @Param("attachments") String attachments);
 
     @Insert("""
             INSERT INTO research_job (parent_id, root_id, question, projects, model, effort, state, claude_session_id, notify, requester, verify, kind)
@@ -79,7 +84,7 @@ public interface ResearchJobMapper {
     /** 루트 목록(최신 순). 목록엔 결과 본문을 싣지 않는다. */
     @Select("""
             SELECT id, parent_id, root_id, question, projects, model, effort, state, claude_session_id, NULL AS result_md,
-                   last_error, turns, input_tokens, output_tokens, elapsed_ms, notify, requester, verify, verify_state, NULL AS verify_md, kind,
+                   last_error, turns, input_tokens, output_tokens, elapsed_ms, notify, requester, verify, verify_state, NULL AS verify_md, kind, attachments,
                    created_at, started_at, finished_at, updated_at
             FROM research_job WHERE parent_id IS NULL ORDER BY id DESC LIMIT #{limit}
             """)

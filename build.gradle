@@ -5,7 +5,7 @@ plugins {
 }
 
 group = 'io.github.lib0823'
-version = '1.9.2'
+version = '1.10.0'
 
 java {
     toolchain {

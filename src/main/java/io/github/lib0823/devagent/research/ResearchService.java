@@ -67,6 +67,7 @@ public class ResearchService {
     private final UsageService usage;
     private final MessengerService client;
     private final NotificationService notifications;
+    private final ResearchAttachments attachments;
     private final int adminPort;
 
     private final ExecutorService worker = Executors.newSingleThreadExecutor(r -> {
@@ -81,8 +82,10 @@ public class ResearchService {
 
     public ResearchService(ResearchProperties props, GitLabProperties gitlabProps, ResearchJobMapper jobs, CodingAgent agent,
                            GitRunner git, GitLabClient gitlab, IssueEventBus events, SettingService settings, UsageService usage,
-                           MessengerService client, NotificationService notifications, @Value("${server.port:8777}") int adminPort) {
+                           MessengerService client, NotificationService notifications, ResearchAttachments attachments,
+                           @Value("${server.port:8777}") int adminPort) {
         this.notifications = notifications;
+        this.attachments = attachments;
         this.props = props;
         this.gitlabProps = gitlabProps;
         this.jobs = jobs;
@@ -148,6 +151,12 @@ public class ResearchService {
     /** @param kind 결과 형식({@link ResearchJob#KIND_ISSUE} 면 이슈 초안). 항목마다 따로이며 후속 질문이 물려받지 않는다. */
     public ResearchJob submit(String question, List<String> projects, String model, String effort, Long parentId, boolean notify, String requester,
                               Boolean verify, String kind) {
+        return submit(question, projects, model, effort, parentId, notify, requester, verify, kind, null);
+    }
+
+    /** @param staged 화면이 먼저 올려 둔 첨부 이미지의 임시 이름({@link ResearchAttachments#stage}). 항목마다 따로이며 후속 질문이 물려받지 않는다. */
+    public ResearchJob submit(String question, List<String> projects, String model, String effort, Long parentId, boolean notify, String requester,
+                              Boolean verify, String kind, List<String> staged) {
         if (!enabled()) {
             throw new IllegalArgumentException("질의 워크플로우가 비활성 상태입니다(research.enabled / gitlab.enabled).");
         }
@@ -158,6 +167,7 @@ public class ResearchService {
         if (q.length() > MAX_QUESTION) {
             throw new IllegalArgumentException("질문이 너무 깁니다(" + MAX_QUESTION + "자 이내).");
         }
+        List<String> images = attachments.check(staged);
         ResearchJob j = new ResearchJob();
         j.setQuestion(q);
         j.setState(ResearchJob.NEW);
@@ -201,7 +211,14 @@ public class ResearchService {
             jobs.fixRoot(j.getId());
             j.setRootId(j.getId());
         }
+        if (!images.isEmpty()) {
+            j.setAttachments(String.join(",", attachments.claim(j.getId(), images)));
+            jobs.setAttachments(j.getId(), j.getAttachments());
+        }
         events.emit(eventId(j.getId()), IssueEvent.STATE, (parentId == null ? "리서치 접수" : "후속 질문 접수") + " → NEW", ResearchJob.NEW);
+        if (!images.isEmpty()) {
+            events.emit(eventId(j.getId()), IssueEvent.INFO, "첨부 이미지 " + images.size() + "개");
+        }
         events.emit(eventId(j.getId()), IssueEvent.INFO, "질문: " + abbreviate(q, 300), q);
         log.info("질의 접수 #{} root={} projects={} model={}/{} by={}", j.getId(), j.getRootId(), j.getProjects(), j.getModel(), j.getEffort(), requester);
         kick();
@@ -389,8 +406,9 @@ public class ResearchService {
             }
             Path cwd = refs.get(0).dir();
             String sys = systemPrompt(refs);
-            String prompt = j.issueDraft() ? ResearchPrompts.issueDraftPrompt(j.getQuestion(), resume)
-                    : resume ? followupPrompt(j.getQuestion()) : firstPrompt(j.getQuestion());
+            String asked = j.getQuestion() + attachments.promptNote(j);   // 첨부 이미지가 있으면 경로 안내를 덧붙인다
+            String prompt = j.issueDraft() ? ResearchPrompts.issueDraftPrompt(asked, resume)
+                    : resume ? followupPrompt(asked) : firstPrompt(asked);
             CodingAgent.Overrides ov = new CodingAgent.Overrides(j.getModel(), j.getEffort(), props.timeoutOr(), props.maxTurnsOr(), "research");
             events.emit(eid, IssueEvent.CLAUDE, "▶ 질의 " + (resume ? "이어서 " : "") + "시작 (" + j.getModel() + "/" + j.getEffort() + ", 상한 "
                     + props.timeoutOr() / 60_000 + "분/" + props.maxTurnsOr() + "턴)", prompt);
@@ -455,7 +473,7 @@ public class ResearchService {
         CodingAgent.Overrides vov = new CodingAgent.Overrides(m.verifyModel(), m.verifyEffort(), props.timeoutOr(), props.maxTurnsOr(), "research");
         CodingAgent.Result v;
         try {
-            String vprompt = ResearchPrompts.verifierPrompt(j.getQuestion(), document);
+            String vprompt = ResearchPrompts.verifierPrompt(j.getQuestion() + attachments.promptNote(j), document);
             events.emit(eid, IssueEvent.CLAUDE, "▶ 2차 검증 시작 (" + m.verifyModel() + "/" + m.verifyEffort() + ", 독립 세션)", vprompt);
             v = agent.run(cwd, UUID.randomUUID().toString(), false, gitlabProps.agent().analyzeTools(),
                     ResearchPrompts.verifierSystem() + refsNote(refs), vprompt, listener, null, CodingAgent.Stage.ANALYZE, false, vov);
@@ -658,6 +676,18 @@ public class ResearchService {
 
     public ResearchJob find(long id) {
         return jobs.find(id);
+    }
+
+    /** 화면이 올린 이미지를 임시 보관하고 이름을 돌려준다(접수 때 그 이름을 함께 보낸다). */
+    public String stageAttachment(byte[] data) {
+        if (!enabled()) {
+            throw new IllegalArgumentException("질의 워크플로우가 비활성 상태입니다.");
+        }
+        return attachments.stage(data);
+    }
+
+    public Path attachmentFile(long jobId, String name) {
+        return attachments.file(jobId, name);
     }
 
     public Map<String, Object> options() {

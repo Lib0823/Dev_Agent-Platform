@@ -40,6 +40,7 @@ public class ResearchJob {
     private String verifyState;       // null(안 함) / PASS / FIXED(지적 반영해 수정) / FAIL(지적은 있으나 수정 실패) / SKIPPED(검증 실행 실패)
     private String verifyMd;          // 검증자 보고서
     private String kind = KIND_DOC;   // 결과 형식: doc(조사 문서) / issue(GitLab 이슈 초안 — 화면에서 「이슈로 등록」)
+    private String attachments;       // 첨부 이미지 이름(쉼표 구분: 1.png,2.jpg) — 파일은 작업 디렉터리 research-attach/<id>/
     private OffsetDateTime createdAt;
     private OffsetDateTime startedAt;
     private OffsetDateTime finishedAt;
@@ -56,6 +57,15 @@ public class ResearchJob {
         return Arrays.stream(projects.split(",")).map(String::strip).filter(s -> !s.isEmpty()).toList();
     }
 
+    public List<String> attachmentList() {
+        if (attachments == null || attachments.isBlank()) {
+            return List.of();
+        }
+        return Arrays.stream(attachments.split(",")).map(String::strip).filter(s -> !s.isEmpty()).toList();
+    }
+
+    public String getAttachments() { return attachments; }
+    public void setAttachments(String attachments) { this.attachments = attachments; }
     public long getId() { return id; }
     public void setId(long id) { this.id = id; }
     public Long getParentId() { return parentId; }
