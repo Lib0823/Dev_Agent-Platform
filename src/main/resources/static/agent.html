@@ -142,14 +142,54 @@
   .term .none { color: #5b667d; padding: 10px 6px; }
 
   /* ---------- diff ---------- */
-  .diff { font-family: var(--mono); font-size: 12px; line-height: 1.55; border: 1px solid var(--line); border-radius: 12px; overflow: auto; max-height: 70vh; background: var(--surface2); }
-  .diff .l { white-space: pre; padding: 0 12px; }
-  .diff .add { background: color-mix(in srgb, var(--ok) 13%, transparent); color: var(--ok); }
-  .diff .del { background: color-mix(in srgb, var(--err) 13%, transparent); color: var(--err); }
-  .diff .hunk { background: color-mix(in srgb, var(--info) 12%, transparent); color: var(--info); padding: 2px 12px; }
-  .diff .file { background: var(--raised); font-weight: 700; padding: 8px 12px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); position: sticky; top: 0; color: var(--text); }
-  .diff .file:first-child { border-top: none; }
-  .diff .meta { color: var(--muted); }
+  /* 파일마다 접히는 묶음. 본문(줄)은 펼칠 때 그린다 — 큰 diff 에서도 처음엔 파일 목록만 DOM 에 있다 */
+  .dbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 12.5px; color: var(--text2); margin-bottom: 10px; }
+  .dbar .ttl { flex-basis: 100%; font-family: var(--mono); font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dbar .in { width: 200px; padding: 5px 10px; font-size: 12.5px; }
+  .dbar .sp { flex: 1; }
+  .diff .a, .dbar .a { color: var(--ok); } .diff .d, .dbar .d { color: var(--err); }
+  .diff { font-family: var(--mono); font-size: 12px; line-height: 1.55; }
+  .df { border: 1px solid var(--line); border-radius: 10px; background: var(--surface2); margin-bottom: 6px; overflow: hidden; }
+  .df > summary { display: flex; gap: 8px; align-items: center; padding: 7px 12px; cursor: pointer; list-style: none; user-select: none; }
+  .df > summary::-webkit-details-marker { display: none; }
+  .df > summary::before { content: "▸"; color: var(--muted); width: 10px; flex: none; }
+  .df[open] > summary::before { content: "▾"; }
+  .df[open] > summary { background: var(--raised); border-bottom: 1px solid var(--line); }
+  .df > summary:hover { background: var(--raised); }
+  .df .p { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }   /* 파일 이름 먼저, 폴더는 뒤에 흐리게(길면 폴더 쪽이 잘린다) */
+  .df .p b { color: var(--text); font-weight: 700; } .df .p .dir { color: var(--muted); margin-left: 10px; }
+  .df .tg { font: 600 10.5px/16px var(--font); padding: 0 7px; border-radius: 999px; background: var(--infobg); color: var(--info); flex: none; }
+  .df .cnt { flex: none; display: flex; gap: 8px; font-variant-numeric: tabular-nums; }
+  .dfb { overflow-x: auto; }
+  .dfb .w { display: inline-block; min-width: 100%; }
+  .dfb .l { white-space: pre; padding-right: 12px; }
+  .dfb .l i { display: inline-block; width: 42px; padding-right: 8px; text-align: right; font-style: normal; color: var(--muted); opacity: .65; user-select: none; }
+  .dfb .l i + i { margin-right: 8px; border-right: 1px solid var(--line); }
+  .dfb .add { background: color-mix(in srgb, var(--ok) 13%, transparent); color: var(--ok); }
+  .dfb .del { background: color-mix(in srgb, var(--err) 13%, transparent); color: var(--err); }
+  .dfb .hunk { background: color-mix(in srgb, var(--info) 10%, transparent); color: var(--info); padding: 2px 12px; }
+  .dfb .meta { color: var(--muted); padding-left: 12px; }
+
+  /* ---------- 문서(설계안·변경 요약·검증): 절마다 카드 ---------- */
+  .pane .md { max-width: 980px; }
+  .pane .md .msec { border: 1px solid var(--line); border-radius: 12px; background: var(--surface2); padding: 13px 18px 9px; margin: 0 0 10px; }
+  .pane .md .msec > h2 { margin: 0 0 8px; font-size: 14.5px; }
+  .pane .md .msec.warn { border-color: color-mix(in srgb, var(--warn) 38%, var(--line)); }
+  .pane .md .msec.warn > h2::before { background: var(--warn); }
+  .pane .md h3 { margin: 14px 0 4px; padding-top: 10px; border-top: 1px dashed var(--line2); font-size: 13px; color: var(--muted); letter-spacing: .02em; }
+  .pane .md .msec > h2 + h3 { border-top: none; padding-top: 0; margin-top: 4px; }
+  .pane .md li { margin: 5px 0; } .pane .md li li { margin: 2px 0; color: var(--text2); font-size: 13.5px; }
+  .pane .md li > ul, .pane .md li > ol { margin: 3px 0 4px; }
+  .pane .md li .sub { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+  .pane .md .tg { display: inline-block; font: 700 10.5px/17px var(--mono); padding: 0 7px; border-radius: 5px; margin-right: 7px; vertical-align: 1px; }
+  .pane .md .tg.ok, .pane .md .vd.ok, .pane .md .vb.ok { background: var(--okbg); color: var(--ok); }
+  .pane .md .tg.err, .pane .md .vd.err, .pane .md .vb.err { background: var(--errbg); color: var(--err); }
+  .pane .md .tg.warn { background: var(--warnbg); color: var(--warn); } .pane .md .tg.gray { background: var(--raised); color: var(--muted); }
+  .pane .md .vd { display: inline-block; font: 700 12.5px/24px var(--mono); padding: 0 12px; border-radius: 999px; }
+  .pane .md .vb { font-weight: 700; font-size: 14px; padding: 9px 14px; border-radius: 10px; margin: 0 0 10px; }
+  .pane .md .lbl { font-size: 12px; font-weight: 600; color: var(--muted); margin: 12px 0 2px; }
+  .pane .md .lbl + ul { font-size: 12.5px; word-break: break-all; }
+  .pane .md pre.commit { white-space: pre-wrap; word-break: break-word; margin: 0 0 6px; }
 
   /* ---------- timeline ---------- */
   .tl { position: relative; padding-left: 26px; max-width: 980px; }
@@ -328,6 +368,11 @@ const { $, esc, fmt, hhmm, ago, dur, KOR, cls, isActive, I, toast } = UI;
 UI.topbar('agent', '에이전트 대시보드');
 UI.splitter('agent', 340);
 const mdc = UI.memo(t => md(t));   // 같은 마크다운을 갱신 때마다 다시 변환하지 않는다
+// 검증 보고: 리뷰어가 쓴 절(## 판정/근거/수정 요청)은 「독립 리뷰」 카드 안의 소제목으로 내린다
+const vmdc = UI.memo(t => {
+  const i = t.indexOf('\n## 독립 리뷰'), j = i < 0 ? -1 : t.indexOf('\n', i + 1);
+  return md(j < 0 ? t : t.slice(0, j) + t.slice(j).replace(/^##\s/gm, '### '));
+});
 // 대시보드에서는 상단 칩이 현재 페이지 상태이므로 링크 대신 실시간 연결 칩을 추가
 $('strip').insertAdjacentHTML('beforeend', '<span class="chip live" id="live"><span class="dot"></span><span>연결 중</span></span>');
 $('icEmpty').innerHTML = I.clock.replace(/width="14" height="14"/, 'width="30" height="30"');
@@ -609,7 +654,7 @@ function renderDetail() {
   renderActions(); renderRunner();
   UI.set($('design'), s.designText ? mdc(s.designText) : '<div class="md-empty">아직 설계안이 없습니다. 분석이 끝나면 여기에 표시됩니다.</div>');
   UI.set($('summary'), s.changeSummary ? mdc(s.changeSummary) : '<div class="md-empty">아직 변경 요약이 없습니다. 코드 수정이 끝나면 표시됩니다.</div>');
-  UI.set($('verify'), s.verifyResult ? mdc(s.verifyResult)
+  UI.set($('verify'), s.verifyResult ? vmdc(s.verifyResult)
     : s.state === 'VERIFYING' ? '<div class="md-empty">검증 중입니다 — 봇이 빌드·정적검사를 돌리고 독립 리뷰어가 확인합니다. 활동 로그에서 진행을 볼 수 있습니다.</div>'
     : '<div class="md-empty">아직 검증 결과가 없습니다. 코드 수정이 끝나면 봇 검사(빌드·JS/JSP 문법)와 독립 리뷰어 판정이 여기 표시됩니다.</div>');
   const cv = $('cntVerify'); if (cv) { cv.style.display = s.verifyRounds ? '' : 'none'; cv.textContent = s.verifyRounds ? (s.verifyRounds + '회') : ''; }
@@ -833,14 +878,61 @@ async function loadDiff() {
   const d = await (await fetch(`/api/agent/sessions/${selId}/diff`)).json();
   diffLoadedFor = key;
   if (!d.available || !d.diff.trim()) { box.innerHTML = '<div class="md-empty">표시할 diff 가 없습니다.<br>코드 수정 단계 이후엔 작업트리 diff, 푸시 후엔 커밋 diff 를 보여줍니다.</div>'; return; }
-  box.innerHTML = '<div class="diff">' + d.diff.split('\n').map(l => {
-    let c='';
-    if (l.startsWith('diff --git')) c='file'; else if (l.startsWith('@@')) c='hunk';
-    else if (l.startsWith('+++')||l.startsWith('---')||l.startsWith('index ')||l.startsWith('commit ')) c='meta';
-    else if (l.startsWith('+')) c='add'; else if (l.startsWith('-')) c='del';
-    return `<div class="l ${c}">${esc(l)||' '}</div>`;
-  }).join('') + '</div>';
+  const p = parseDiff(d.diff); diffFiles = p.files;
+  if (!p.files.length) { box.innerHTML = `<div class="diff"><div class="df"><div class="dfb"><div class="w">${p.head.map(l => `<div class="l meta">${esc(l)||' '}</div>`).join('')}</div></div></div></div>`; return; }
+  const add = p.files.reduce((a,f)=>a+f.add,0), del = p.files.reduce((a,f)=>a+f.del,0);
+  const open = p.files.reduce((a,f)=>a+f.lines.length,0) <= 400;      // 작은 diff 는 바로 펼쳐 보여 준다
+  const ttl = p.head.find(l => l.startsWith('commit '));
+  box.innerHTML = `<div class="dbar">${ttl ? `<div class="ttl" title="${esc(ttl)}">${esc(ttl)}</div>` : ''}
+      <b>파일 ${p.files.length}개</b><span class="a">+${add}</span><span class="d">−${del}</span><span class="sp"></span>
+      ${p.files.length > 8 ? '<input class="in" placeholder="파일 이름으로 거르기" oninput="dfFilter(this.value)">' : ''}
+      <button class="btn sm" onclick="dfAll(true)">모두 펼치기</button><button class="btn sm" onclick="dfAll(false)">모두 접기</button></div>
+    <div class="diff">` + p.files.map((f,i) => {
+      const cut = f.path.lastIndexOf('/') + 1;
+      return `<details class="df" data-i="${i}" ontoggle="dfFill(this)"${open ? ' open' : ''}><summary><span class="p" title="${esc(f.path)}"><b>${esc(f.path.slice(cut))}</b><span class="dir">${esc(f.path.slice(0,cut))}</span></span>${f.tag ? `<span class="tg">${f.tag}</span>` : ''}
+        <span class="cnt">${f.add ? `<span class="a">+${f.add}</span>` : ''}${f.del ? `<span class="d">−${f.del}</span>` : ''}</span></summary><div class="dfb"></div></details>`;
+    }).join('') + '</div>';
+  if (open) box.querySelectorAll('.df').forEach(dfFill);
 }
+let diffFiles = [];
+/** git diff/show 출력을 파일 단위로 나눈다. 파일 머리(index·---·+++)는 버리고 추가/삭제 줄 수를 센다. */
+function parseDiff(text) {
+  const head = [], files = []; let f = null, hunk = false;
+  for (const l of text.replace(/\r/g,'').replace(/\n+$/,'').split('\n')) {
+    if (l.startsWith('diff --git ')) {
+      const m = /^diff --git a\/(.*) b\/(.*)$/.exec(l);
+      f = { path: m ? m[2] : l.slice(11), lines: [], add: 0, del: 0, tag: '' }; files.push(f); hunk = false; continue;
+    }
+    if (!f) { head.push(l); continue; }
+    if (l.startsWith('@@')) { hunk = true; f.lines.push(l); continue; }
+    if (!hunk) {
+      if (l.startsWith('new file')) f.tag = '신규'; else if (l.startsWith('deleted file')) f.tag = '삭제';
+      else if (l.startsWith('rename from')) f.tag = '이름 변경'; else if (l.startsWith('Binary files')) f.tag = '바이너리';
+      continue;
+    }
+    if (l[0] === '+') f.add++; else if (l[0] === '-') f.del++;
+    f.lines.push(l);
+  }
+  return { head, files };
+}
+/** 파일 묶음을 처음 펼칠 때 줄을 그린다(왼쪽 두 칸 = 수정 전/후 줄 번호). */
+function dfFill(el) {
+  if (!el.open || el.dataset.done) return;
+  const f = diffFiles[+el.dataset.i]; if (!f) return;
+  el.dataset.done = '1';
+  let o = 0, n = 0, h = '';
+  for (const l of f.lines) {
+    const c = l[0];
+    if (c === '@') { const m = /^@@ -(\d+)(?:,\d+)? \+(\d+)/.exec(l); if (m) { o = +m[1]; n = +m[2]; } h += `<div class="l hunk">${esc(l)}</div>`; }
+    else if (c === '+') h += `<div class="l add"><i></i><i>${n++}</i>${esc(l)}</div>`;
+    else if (c === '-') h += `<div class="l del"><i>${o++}</i><i></i>${esc(l)}</div>`;
+    else if (c === '\\') h += `<div class="l meta">${esc(l)}</div>`;
+    else h += `<div class="l"><i>${o++}</i><i>${n++}</i>${esc(l)||' '}</div>`;
+  }
+  el.querySelector('.dfb').innerHTML = `<div class="w">${h || '<div class="l meta">표시할 줄이 없습니다(바이너리이거나 내용 변경 없음)</div>'}</div>`;
+}
+function dfAll(open) { document.querySelectorAll('#diff .df').forEach(e => { if (e.style.display !== 'none') e.open = open; }); }
+function dfFilter(q) { q = q.trim().toLowerCase(); document.querySelectorAll('#diff .df').forEach(e => { e.style.display = !q || diffFiles[+e.dataset.i].path.toLowerCase().includes(q) ? '' : 'none'; }); }
 
 // ---------------------------------------------------------------- tabs
 document.querySelectorAll('.tabs .tab').forEach(t => t.addEventListener('click', () => {
@@ -852,21 +944,47 @@ document.querySelectorAll('.tabs .tab').forEach(t => t.addEventListener('click',
 
 // ---------------------------------------------------------------- minimal markdown
 function md(src) {
-  const lines = src.replace(/\r/g,'').split('\n'); let out='', inCode=false, list=null;
+  // 에이전트 보고서용: 절(#·##)마다 카드로 묶고, 들여쓴 목록은 중첩으로, [OK]/[FAIL]·PASS/FAIL 은 배지로 그린다.
+  const lines = src.replace(/\r/g,'').split('\n'); let out='', inCode=false, sec=false, gap=false, pre=null; const st=[];
   const inline = s => esc(s).replace(/`([^`]+)`/g,'<code>$1</code>').replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>')
       .replace(/(https?:\/\/[^\s<)]+)/g,'<a href="$1" target="_blank">$1</a>');
-  const closeList = () => { if (list) { out += `</${list}>`; list=null; } };
+  const TAG = { OK:'ok', PASS:'ok', FAIL:'err', ERROR:'err', WARN:'warn', SKIP:'gray' };
+  const item = s => { const m=/^\[([A-Z]+)\]\s*(.*)$/.exec(s); return m && TAG[m[1]] ? `<span class="tg ${TAG[m[1]]}">${m[1]}</span>${inline(m[2])}` : inline(s); };
+  const closeLists = () => { while (st.length) out += `</li></${st.pop().t}>`; gap=false; };
+  const closePre = () => { if (pre) { out += `<pre class="commit">${esc(pre.join('\n').trim())}</pre>`; pre=null; } };
+  const closeSec = () => { closeLists(); closePre(); if (sec) { out += '</section>'; sec=false; } };
   for (const raw of lines) {
-    if (raw.startsWith('```')) { closeList(); inCode=!inCode; out += inCode?'<pre><code>':'</code></pre>'; continue; }
+    if (raw.startsWith('```')) { closeLists(); inCode=!inCode; out += inCode?'<pre><code>':'</code></pre>'; continue; }
     if (inCode) { out += esc(raw)+'\n'; continue; }
     const l = raw.trimEnd(); let m;
-    if ((m=/^(#{1,3})\s+(.*)$/.exec(l))) { closeList(); const lv=Math.min(3,m[1].length+1); out += `<h${lv}>${inline(m[2])}</h${lv}>`; }
-    else if ((m=/^\s*[-*•]\s+(.*)$/.exec(l))) { if (list!=='ul'){ closeList(); out+='<ul>'; list='ul'; } out += `<li>${inline(m[1])}</li>`; }
-    else if ((m=/^\s*\d+[.)]\s+(.*)$/.exec(l))) { if (list!=='ol'){ closeList(); out+='<ol>'; list='ol'; } out += `<li>${inline(m[1])}</li>`; }
-    else if (!l.trim()) closeList();
-    else { closeList(); out += `<p>${inline(l)}</p>`; }
+    if ((m=/^(#{1,3})\s+(.*)$/.exec(l))) {
+      if (m[1].length < 3) {
+        closeSec(); sec=true;
+        out += `<section class="msec${/확인 필요|수정 요청|위험/.test(m[2]) ? ' warn' : ''}"><h2>${inline(m[2])}</h2>`;
+        if (/커밋 메시지/.test(m[2])) pre=[];              // 커밋 메시지는 줄바꿈 그대로
+      } else { closeLists(); closePre(); out += `<h3>${inline(m[2])}</h3>`; }
+    }
+    else if (pre) pre.push(l);
+    else if ((m=/^(\s*)(?:[-*•]|(\d+)[.)])\s+(.*)$/.exec(l))) {
+      const ind=m[1].length, t=m[2] ? 'ol' : 'ul';
+      while (st.length && ind < st[st.length-1].i) out += `</li></${st.pop().t}>`;
+      const top=st[st.length-1];
+      if (top && top.i===ind && top.t===t) out += '</li>';
+      else { if (top && top.i===ind) out += `</li></${st.pop().t}>`; out += t==='ol' ? `<ol start="${m[2]}">` : '<ul>'; st.push({t, i:ind}); }
+      out += '<li>' + item(m[3]); gap=false;
+    }
+    else if (!l.trim()) gap = st.length > 0;               // 빈 줄만으로는 목록을 닫지 않는다(번호가 1 로 되돌아가지 않게)
+    else if (st.length && !gap && /^\s/.test(l)) out += `<div class="sub">${inline(l.trim())}</div>`;   // 항목에 딸린 들여쓴 줄
+    else {
+      closeLists();
+      if (/^(✅|❌)/.test(l) && !sec) out += `<div class="vb ${l.startsWith('✅') ? 'ok' : 'err'}">${inline(l)}</div>`;
+      else if (/^(PASS|FAIL)$/.test(l.trim())) out += `<p><span class="vd ${l.trim()==='PASS' ? 'ok' : 'err'}">${l.trim()}</span></p>`;
+      else if ((m=/^\[([^\]]{1,12})\]$/.exec(l.trim()))) out += `<div class="lbl">${esc(m[1])}</div>`;
+      else out += `<p>${inline(l)}</p>`;
+    }
   }
-  closeList(); if (inCode) out+='</code></pre>';
+  if (inCode) out+='</code></pre>';
+  closeSec();
   return out;
 }
 
