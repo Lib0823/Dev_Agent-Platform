@@ -98,7 +98,7 @@ public class SkillService {
     /**
      * 해당 단계에 적용되는 스킬을 시스템 프롬프트용 블록으로. 없으면 빈 문자열.
      *
-     * @param stageKey analyze | fix | verify | research
+     * @param stageKey analyze | fix | verify | research | maintain
      */
     public String promptNote(String stageKey) {
         List<AgentSkill> skills = cache.stream().filter(s -> s.appliesTo(stageKey)).toList();

@@ -87,6 +87,8 @@ public class ClaudeCliAgent implements CodingAgent {
     private final Map<String, RunInfo> runs = new java.util.concurrent.ConcurrentHashMap<>();
     /** 선택한 모델을 쓸 수 없을 때(권한 없음·미지원) 대체할 모델. */
     static final String FALLBACK_MODEL = "opus";
+    /** 플랫폼 관리 세션의 사용량 구분값(Overrides.source) 겸 스킬 단계 키. */
+    static final String MAINTAIN_SOURCE = "maintain";
 
     /** 해당 Claude 세션이 지금 실행 중이면 그 실행 정보, 아니면 null. */
     @Override
@@ -295,6 +297,8 @@ public class ClaudeCliAgent implements CodingAgent {
                            String systemAppend, String prompt, Listener listener, Path shotsDir, Stage stage, boolean previewUp,
                            String model, String effort, Overrides ov) {
         boolean fixStage = stage == Stage.FIX;
+        // 플랫폼 관리 세션(자기 저장소 유지보수): 대상 프로젝트용 프리뷰·운영 MCP 안내를 싣지 않고, 푸시는 화면 버튼의 몫이라 막는다
+        boolean maintain = ov != null && MAINTAIN_SOURCE.equals(ov.source());
         List<String> cmd = new ArrayList<>();
         cmd.add(claude.warmCommand());                // claude.exe 직접 실행 (한글 인자 안전)
         cmd.add("-p");
@@ -305,6 +309,10 @@ public class ClaudeCliAgent implements CodingAgent {
         cmd.add("--disable-slash-commands");
         cmd.add("--disallowedTools");                 // Bash 권한 패턴을 우회하는 PowerShell 도구는 막는다(실측: allowedTools 에 없어도 실행됨)
         cmd.add("PowerShell");
+        if (maintain) {
+            cmd.add("Bash(git push:*)");
+            cmd.add("Read(./.env)");                  // 비밀값 파일은 읽기 도구로도 열지 못하게(셸 우회까지 막지는 못한다 — 프롬프트로도 금지)
+        }
         boolean subagents = settings.getAgentSubagents();
         boolean teams = settings.getAgentTeams();
         if (!subagents) {
@@ -351,11 +359,13 @@ public class ClaudeCliAgent implements CodingAgent {
             cmd.add("--max-turns");
             cmd.add(String.valueOf(maxTurns));
         }
-        boolean withMcp = mcp.agentEnabled();
+        boolean withMcp = mcp.agentEnabled() && !maintain;
         boolean withPw = (fixStage || (stage == Stage.VERIFY && previewUp)) && shotsDir != null && mcp.playwrightEnabled();
         List<String> tools = new ArrayList<>(allowedTools == null ? List.of() : allowedTools);
         tools.addAll(docsTools());                    // 사내 문서 검색/읽기(curl → 봇 로컬 API)
-        tools.addAll(previewTools(stage));            // preview / jscheck / jspcheck 스크립트
+        if (!maintain) {
+            tools.addAll(previewTools(stage));        // preview / jscheck / jspcheck 스크립트
+        }
         Path mcpConfig = withPw ? mcp.configFor(shotsDir) : (withMcp ? mcp.configPath() : null);
         if (mcpConfig != null) {
             cmd.add("--mcp-config");                  // 운영 데이터(opensearch/postgres/k3s) 읽기 전용 도구 + (수정 단계) playwright
@@ -376,13 +386,13 @@ public class ClaudeCliAgent implements CodingAgent {
         if (!dh.isEmpty()) {
             sys = (sys.isEmpty() ? "" : sys + "\n\n") + dh;
         }
-        // 플랫폼 스킬: 질의는 research, 그 외는 단계(analyze/fix/verify)에 맞는 지침
+        // 플랫폼 스킬: 질의는 research, 플랫폼 관리는 maintain, 그 외는 단계(analyze/fix/verify)에 맞는 지침
         String skillNote = skills == null ? "" : skills.promptNote(
-                ov != null && "research".equals(ov.source()) ? "research" : stage.name().toLowerCase(java.util.Locale.ROOT));
+                maintain ? MAINTAIN_SOURCE : ov != null && "research".equals(ov.source()) ? "research" : stage.name().toLowerCase(java.util.Locale.ROOT));
         if (!skillNote.isEmpty()) {
             sys = (sys.isEmpty() ? "" : sys + "\n\n") + skillNote;
         }
-        if (fixStage) {
+        if (fixStage && !maintain) {
             String ph = previewHint(shotsDir);
             if (!ph.isEmpty()) {
                 sys = (sys.isEmpty() ? "" : sys + "\n\n") + ph;
@@ -427,7 +437,13 @@ public class ClaudeCliAgent implements CodingAgent {
             env.put("BASH_DEFAULT_TIMEOUT_MS", "600000");
             env.put("BASH_MAX_TIMEOUT_MS", String.valueOf(Math.max(600_000L, Math.min(3_000_000L, timeoutMs - 60_000L))));
             installShims();                           // 설정이 바뀌었을 수 있으니 매 실행 전 멱등 갱신
-            if (preview != null && preview.enabled()) {
+            if (maintain) {
+                // 플랫폼 자신을 빌드한다: 프리뷰 JDK(21)가 아니라 지금 이 JVM 의 JDK(javac 가 있으면)를 쓴다. JRE 로 떴으면 물려받은 JAVA_HOME 그대로
+                Path own = Path.of(System.getProperty("java.home"));
+                if (java.nio.file.Files.exists(own.resolve("bin").resolve("javac.exe")) || java.nio.file.Files.exists(own.resolve("bin").resolve("javac"))) {
+                    env.put("JAVA_HOME", own.toString());
+                }
+            } else if (preview != null && preview.enabled()) {
                 env.put("JAVA_HOME", nz(preview.javaHome()));   // 대상 저장소(Java 21) 빌드용. 봇 자신은 JDK 17 로 돌지만 자식은 프리뷰 JDK
                 env.put("PREVIEW_JAVA_HOME", nz(preview.javaHome()));
                 env.put("PREVIEW_CATALINA_HOME", nz(preview.catalinaHome()));

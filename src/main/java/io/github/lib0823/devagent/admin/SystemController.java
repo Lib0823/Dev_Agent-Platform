@@ -5,6 +5,7 @@ import io.github.lib0823.devagent.boot.Bootstrap;
 import io.github.lib0823.devagent.boot.Launcher;
 import io.github.lib0823.devagent.config.GitLabProperties;
 import io.github.lib0823.devagent.gitlab.IssueAgentService;
+import io.github.lib0823.devagent.maintain.MaintainService;
 import io.github.lib0823.devagent.messenger.MessengerService;
 import io.github.lib0823.devagent.ops.Doctor;
 import io.github.lib0823.devagent.platform.Os;
@@ -41,16 +42,19 @@ public class SystemController {
     private final ConfigurableApplicationContext ctx;
     private final IssueAgentService issues;
     private final ResearchService research;
+    private final MaintainService maintain;
     private final MessengerService messenger;
     private final GitLabProperties gitlab;
     private final Doctor doctor;
     private final String version;
 
-    public SystemController(ConfigurableApplicationContext ctx, IssueAgentService issues, ResearchService research, MessengerService messenger,
+    public SystemController(ConfigurableApplicationContext ctx, IssueAgentService issues, ResearchService research, MaintainService maintain,
+                            MessengerService messenger,
                             GitLabProperties gitlab, Doctor doctor, ObjectProvider<BuildProperties> build) {
         this.ctx = ctx;
         this.issues = issues;
         this.research = research;
+        this.maintain = maintain;
         this.messenger = messenger;
         this.gitlab = gitlab;
         this.doctor = doctor;
@@ -131,7 +135,7 @@ public class SystemController {
     // ---------------------------------------------------------------- 내부
 
     private int busyCount() {
-        return issues.busySessionIds().size() + (research.busy() ? 1 : 0);
+        return issues.busySessionIds().size() + (research.busy() ? 1 : 0) + (maintain.busy() ? 1 : 0);
     }
 
     /** launcher(실행 파일·dev-agent.sh) | run.cmd(작업 스케줄러 감시 루프) | direct(java -jar 직접). */

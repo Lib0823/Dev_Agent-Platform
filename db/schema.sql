@@ -167,6 +167,28 @@ CREATE TABLE IF NOT EXISTS research_job (
 CREATE INDEX IF NOT EXISTS idx_research_job_root ON research_job (root_id, id);
 -- 질의 이벤트는 issue_event 를 공유하며 session_id = 1000000000 + research_job.id
 
+-- 플랫폼 관리(자기 유지보수) 대화: 요청 1건 = 1행. 같은 대화(thread_id = 첫 행의 id)는 Claude 세션 하나를 --resume 으로 이어간다
+CREATE TABLE IF NOT EXISTS maintain_turn (
+    id                 BIGSERIAL    PRIMARY KEY,
+    thread_id          BIGINT       NOT NULL DEFAULT 0,
+    question           TEXT         NOT NULL,
+    answer_md          TEXT,                             -- 답변(마크다운)
+    state              VARCHAR(16)  NOT NULL,            -- NEW/RUNNING/DONE/FAILED/ABORTED
+    claude_session_id  TEXT,
+    model              VARCHAR(32),                      -- NULL 이면 에이전트 설정의 '개발' 모델
+    last_error         TEXT,
+    turns              INT          NOT NULL DEFAULT 0,
+    input_tokens       BIGINT       NOT NULL DEFAULT 0,
+    output_tokens      BIGINT       NOT NULL DEFAULT 0,
+    elapsed_ms         BIGINT       NOT NULL DEFAULT 0,
+    created_at         TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    started_at         TIMESTAMPTZ,
+    finished_at        TIMESTAMPTZ,
+    updated_at         TIMESTAMPTZ  NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_maintain_turn_thread ON maintain_turn (thread_id, id);
+-- 플랫폼 관리 이벤트도 issue_event 를 공유하며 session_id = 2000000000 + maintain_turn.id
+
 -- 관리 페이지에서 등록한 사용자 정의 MCP 서버(내장 opensearch/postgres/k3s-ops 와 함께 work/mcp-servers.json 에 합쳐진다). 비밀값은 ${ENV} 자리표시자만.
 CREATE TABLE IF NOT EXISTS mcp_server (
     name         VARCHAR(32)  PRIMARY KEY,                -- 도구 접두어 mcp__<name>__

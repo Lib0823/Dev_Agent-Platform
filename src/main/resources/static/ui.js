@@ -36,6 +36,7 @@ window.UI = (() => {
     clock: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
     pulse: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>',
     bell: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>',
+    tool: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>',
     branch: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="5" r="2.5"/><circle cx="6" cy="19" r="2.5"/><circle cx="18" cy="8" r="2.5"/><path d="M6 7.5v9M18 10.5c0 3-3 4-6 4.5-2 .3-3.5 1-3.5 2.5"/></svg>',
   };
 
@@ -74,7 +75,7 @@ window.UI = (() => {
   // 읽음·비우기 시각도 브라우저가 기억한다. 저장소를 못 쓰면 이 화면의 메모리에만 남는다.
   const NOTICE_KEY = 'da-notices', NOTICE_MAX = 100;
   const PAGE_NAMES = { home: '홈', agent: '에이전트', research: '리서치', messenger: '메신저', platform: '플랫폼' };
-  const KIND_NAMES = { issue: '이슈 에이전트', research: '리서치', system: '시스템' };
+  const KIND_NAMES = { issue: '이슈 에이전트', research: '리서치', system: '시스템', maintain: '플랫폼 관리' };
   let noticeMem = { seen: 0, cleared: 0, items: [] }, noticeSrv = [], noticePage = '', noticeFirst = true;
   function noticeLoad() {
     try { const d = JSON.parse(localStorage.getItem(NOTICE_KEY) || 'null'); if (d && Array.isArray(d.items)) noticeMem = { seen: d.seen || 0, cleared: d.cleared || 0, items: d.items }; } catch (_) {}
@@ -144,10 +145,263 @@ window.UI = (() => {
     noticePoll(); every(noticePoll, 60000);
   }
 
+  // ---------- 플랫폼 관리(상단 렌치 버튼 → 채팅 창) ----------
+  // 플랫폼 자체의 버그 확인·수정·빌드·커밋·스킬 등록을 맡는 Claude 세션과의 대화(서버 MaintainService — 세션은 플랫폼 소스 저장소에서 돈다).
+  // 푸시와 재시작은 세션이 아니라 창 아래 버튼이 한다. 창이 열려 있는 동안만 조회한다(진행 중 2초, 저장소 상태 10초):
+  // SSE 를 쓰지 않는 이유 — 탭마다 문서가 따로 떠 있어 호스트당 연결 수 제한(6)에 금방 닿는다.
+  // 창(dialog)이 떠 있으면 토스트가 가려지므로 안내는 창 안의 한 줄(mtNote)로 보여 준다.
+  const MT_THREAD = 'da-maint-thread', MT_MODEL = 'da-maint-model';
+  const MT_STATE = { DONE: '완료', FAILED: '실패', ABORTED: '중단됨' };
+  const MT_HINTS = ['최근 로그에서 오류를 찾아 원인을 알려 줘', '지금 저장소에 남아 있는 변경을 요약해 줘', '테스트와 빌드가 통과하는지 확인해 줘'];
+  const mt = { info: null, thread: null, turns: [], events: [], lastEv: 0, liveId: 0, running: null, status: null, tick: 0, timer: null, note: null, noteT: null, sending: false, downOn: null };
+  const mtGet = async u => (await fetch(u, { cache: 'no-store' })).json();
+  const mtPost = async (u, body) => (await fetch(u, { method: 'POST', body: new URLSearchParams(body || {}) })).json();
+  const mtLs = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (_) {} return null; };
+  const mtLive = () => { const t = mt.turns[mt.turns.length - 1]; return !!t && (t.state === 'NEW' || t.state === 'RUNNING'); };
+  /** 답변용 작은 마크다운(제목·목록·코드·표·굵게·링크). */
+  const mtMd = memo(src => {
+    const lines = String(src).replace(/\r/g, '').split('\n'); let out = '', code = false, list = null, tbl = false;
+    const inline = s => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
+      .replace(/(https?:\/\/[^\s<)]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+    const closeList = () => { if (list) { out += `</${list}>`; list = null; } };
+    const closeTbl = () => { if (tbl) { out += '</tbody></table>'; tbl = false; } };
+    const cells = l => l.trim().replace(/^\||\|$/g, '').split('|').map(c => c.trim());
+    for (const raw of lines) {
+      if (raw.trimStart().startsWith('```')) { closeList(); closeTbl(); code = !code; out += code ? '<pre><code>' : '</code></pre>'; continue; }
+      if (code) { out += esc(raw) + '\n'; continue; }
+      const l = raw.trimEnd(); let m;
+      if (/^\s*\|.*\|\s*$/.test(l)) {
+        closeList();
+        if (/^\s*\|[\s:|-]+\|\s*$/.test(l)) continue;   // 머리글 아래 구분선
+        if (!tbl) { tbl = true; out += '<table><thead><tr>' + cells(l).map(c => `<th>${inline(c)}</th>`).join('') + '</tr></thead><tbody>'; }
+        else out += '<tr>' + cells(l).map(c => `<td>${inline(c)}</td>`).join('') + '</tr>';
+        continue;
+      }
+      closeTbl();
+      if ((m = /^(#{1,4})\s+(.*)$/.exec(l))) { closeList(); const lv = Math.min(3, m[1].length + 1); out += `<h${lv}>${inline(m[2])}</h${lv}>`; }
+      else if ((m = /^\s*[-*•]\s+(.*)$/.exec(l))) { if (list !== 'ul') { closeList(); out += '<ul>'; list = 'ul'; } out += `<li>${inline(m[1])}</li>`; }
+      else if ((m = /^\s*\d+[.)]\s+(.*)$/.exec(l))) { if (list !== 'ol') { closeList(); out += '<ol>'; list = 'ol'; } out += `<li>${inline(m[1])}</li>`; }
+      else if (!l.trim()) closeList();
+      else { closeList(); out += `<p>${inline(l)}</p>`; }
+    }
+    closeList(); closeTbl(); if (code) out += '</code></pre>';
+    return out;
+  });
+  function mtNote(msg, kind) {
+    mt.note = msg ? { m: String(msg), k: kind || '' } : null;
+    clearTimeout(mt.noteT); if (msg) mt.noteT = setTimeout(() => mtNote(null), kind === 'err' ? 15000 : 7000);
+    const el = $('mtNote'); if (el) { el.className = 'mnote ' + (mt.note ? mt.note.k : ''); el.textContent = mt.note ? mt.note.m : ''; }
+    if (msg) noticeAdd(msg, kind);
+  }
+  function mtBuild() {
+    let d = $('maintDlg'); if (d) return d;
+    d = document.createElement('dialog'); d.id = 'maintDlg'; d.className = 'maint';
+    d.innerHTML = `
+      <div class="mhead"><span class="mic">${I.tool}</span><b>플랫폼 관리</b>
+        <select class="in" id="mtThread" title="대화 선택"></select>
+        <button class="btn sm" id="mtNew" title="새 대화(새 Claude 세션)">${I.plus}새 대화</button>
+        <span class="sp"></span>
+        <select class="in" id="mtModel" title="이 요청에 쓸 모델"></select>
+        <button class="icon-btn" id="mtClose" title="닫기 (Esc) — 닫아도 작업은 계속됩니다">${I.x}</button></div>
+      <div class="mbody" id="mtBody"></div>
+      <div class="mnote" id="mtNote"></div>
+      <div class="mstat" id="mtStat"></div>
+      <div class="minput"><textarea class="in" id="mtInput" rows="2" placeholder="플랫폼에 대해 물어보거나 고칠 것을 적으세요. 예) 리서치 탭에서 후속 질문이 안 보내져 — 원인 찾아서 고쳐 줘   (Enter 전송 · Shift+Enter 줄바꿈)"></textarea>
+        <button class="btn primary" id="mtSend" title="보내기 (Enter)">${I.send}</button></div>`;
+    document.body.appendChild(d);
+    $('mtClose').addEventListener('click', () => d.close());
+    // 바깥(배경)을 눌렀을 때만 닫는다 — 안에서 글을 끌어 선택하다 밖에서 놓은 경우는 제외
+    d.addEventListener('mousedown', e => { mt.downOn = e.target; });
+    d.addEventListener('click', e => { if (e.target === d && mt.downOn === d) d.close(); });
+    d.addEventListener('close', () => { clearInterval(mt.timer); mt.timer = null; mtInfo(); });
+    $('mtNew').addEventListener('click', () => { mtSelect(null); $('mtInput').focus(); });
+    $('mtThread').addEventListener('change', e => mtSelect(Number(e.target.value) || null));
+    $('mtModel').addEventListener('change', e => mtLs(MT_MODEL, e.target.value || null));
+    $('mtSend').addEventListener('click', mtSend);
+    $('mtInput').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); mtSend(); } });
+    $('mtBody').addEventListener('click', e => {
+      const t = e.target instanceof Element ? e.target : null; if (!t) return;
+      const ab = t.closest('[data-abort]'), hint = t.closest('[data-hint]');
+      if (ab) mtAbort(Number(ab.dataset.abort));
+      if (hint) { $('mtInput').value = hint.textContent; $('mtInput').focus(); }
+    });
+    $('mtStat').addEventListener('click', e => {
+      const t = e.target instanceof Element ? e.target.closest('button') : null; if (!t || t.disabled) return;
+      if (t.id === 'mtPush') mtPush(); else if (t.id === 'mtRestart') mtRestart();
+    });
+    return d;
+  }
+  /** 버튼 상태·대화 목록(가벼운 조회). 쓸 수 없는 설치(소스 저장소 없음)면 버튼을 숨긴다. */
+  async function mtInfo() {
+    let d; try { d = await mtGet('/api/maintain?limit=30'); } catch (_) { return mt.info; }
+    mt.info = d;
+    try { sessionStorage.setItem('da-maint', d.enabled ? '1' : '0'); } catch (_) {}
+    const b = $('maintBtn');
+    if (b) { b.hidden = !d.enabled; b.classList.toggle('run', !!d.runningId); b.title = (d.runningId ? '플랫폼 관리 — 작업 중' : '플랫폼 관리') + ' (Alt+M)'; }
+    const sel = $('mtThread');
+    if (sel && d.enabled) {
+      const cut = s => { const t = String(s || '').replace(/\s+/g, ' ').trim(); return t.length > 42 ? t.slice(0, 42) + '…' : t; };
+      const html = '<option value="">새 대화</option>' + (d.threads || []).map(t =>
+        `<option value="${t.id}">${t.state === 'RUNNING' || t.state === 'NEW' ? '● ' : ''}${esc(cut(t.title))} · ${ago(t.updatedAt)}</option>`).join('');
+      if (set(sel, html) || sel.value !== String(mt.thread || '')) sel.value = String(mt.thread || '');
+      const ms = $('mtModel'), keep = ms.value || mtLs(MT_MODEL) || '';
+      set(ms, `<option value="">기본 (${esc(d.defaultModel || '')})</option>` + (d.models || []).map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join(''));
+      ms.value = (d.models || []).includes(keep) ? keep : '';
+    }
+    return d;
+  }
+  async function mtStatus() {
+    try { mt.status = await mtGet('/api/maintain/status'); } catch (_) { return; }
+    mtRenderStat();
+  }
+  function mtSelect(id) {
+    mt.thread = id; mt.turns = []; mt.events = []; mt.lastEv = 0; mt.liveId = 0; mt.running = null;
+    mtLs(MT_THREAD, id ? String(id) : null);
+    const sel = $('mtThread'); if (sel) sel.value = String(id || '');
+    mtRender(); mtRenderStat();
+    if (id) mtLoadThread(false).then(() => { const b = $('mtBody'); if (b) b.scrollTop = b.scrollHeight; });
+  }
+  async function mtLoadThread(inc) {
+    const id = mt.thread; if (!id) return;
+    let d; try { d = await mtGet('/api/maintain/threads/' + id + '?afterId=' + (inc ? mt.lastEv : 0)); } catch (_) { return; }
+    if (id !== mt.thread) return;   // 그 사이 다른 대화로 옮겼다
+    const wasLive = mtLive();
+    if (!inc || d.liveId !== mt.liveId) { mt.events = []; if (!inc) mt.lastEv = 0; }
+    mt.turns = d.turns || []; mt.liveId = d.liveId; mt.running = d.running || null;
+    for (const e of d.events || []) { if (e.id > mt.lastEv || !inc) { mt.events.push(e); mt.lastEv = Math.max(mt.lastEv, e.id); } }
+    if (mt.events.length > 300) mt.events = mt.events.slice(-300);
+    mtRender(); mtRenderStat();
+    if (wasLive && !mtLive()) { mtStatus(); mtInfo(); }   // 방금 끝났다: 저장소 상태·버튼 갱신
+  }
+  function mtRender() {
+    const b = $('mtBody'); if (!b) return;
+    const stick = b.scrollHeight - b.scrollTop - b.clientHeight < 80;
+    let h = '';
+    if (!mt.turns.length) {
+      h = `<div class="mempty"><div class="mic">${I.tool}</div><b>플랫폼 관리</b>
+        <div>이 플랫폼의 소스 저장소에서 Claude 세션이 버그를 확인·수정하고, 테스트·빌드·커밋과 스킬 등록까지 처리합니다.<br>
+        푸시와 재시작은 세션이 하지 않습니다 — 끝나면 아래에 나타나는 <b>푸시</b> · <b>재시작 적용</b> 버튼으로 직접 반영하세요.</div>
+        <div class="mhints">${MT_HINTS.map(x => `<button class="chip" data-hint="1">${esc(x)}</button>`).join('')}</div></div>`;
+    }
+    for (const t of mt.turns) {
+      h += `<div class="mq"><div class="bub">${esc(t.question)}</div></div>`;
+      if (t.state === 'NEW' || t.state === 'RUNNING') {
+        const since = t.startedAt ? dur(Date.now() - new Date(t.startedAt).getTime()) : '';
+        const log = mt.events.filter(e => e.kind !== 'STATE').slice(-10).map(e =>
+          `<div class="${e.kind === 'ERROR' ? 'e' : e.kind === 'TEXT' ? 't' : ''}">${e.kind === 'TOOL' ? '▸ ' : ''}${esc(e.message || '')}</div>`).join('');
+        h += `<div class="ma live"><div class="mlh"><span class="mspin"></span><b>${t.state === 'NEW' ? '시작하는 중…' : '작업 중'}</b>
+          <span class="mm">${since}${mt.running ? ' · ' + esc(mt.running.model || '') : ''}</span><span class="sp"></span>
+          <button class="btn sm danger" data-abort="${t.id}">중단</button></div><div class="mlog">${log}</div></div>`;
+      } else {
+        const bad = t.state !== 'DONE';
+        h += `<div class="ma ${bad ? 'bad' : ''}">${t.answerMd ? `<div class="md">${mtMd(t.answerMd)}</div>` : ''}
+          ${t.lastError ? `<div class="merr">${esc(t.lastError)}</div>` : ''}
+          <div class="mmeta">${bad ? `<span class="badge ${t.state === 'ABORTED' ? 'wait' : 'err'}">${MT_STATE[t.state] || esc(t.state)}</span> ` : ''}${t.turns ? t.turns + '턴 · ' : ''}${t.elapsedMs ? dur(t.elapsedMs) + ' · ' : ''}${fmt(t.finishedAt || t.createdAt)}</div></div>`;
+      }
+    }
+    set(b, h);
+    if (stick) b.scrollTop = b.scrollHeight;
+    const live = mtLive(); $('mtSend').disabled = live || mt.sending;
+  }
+  function mtRenderStat() {
+    const el = $('mtStat'); if (!el) return;
+    const s = mt.status; let h = '';
+    if (s && s.error) h += `<span class="mrepo err">저장소 상태를 읽지 못했습니다: ${esc(s.error)}</span>`;
+    else if (s && s.branch != null) {
+      const tip = (s.head ? '최근 커밋: ' + s.head + '\n' : '') + (s.unpushed && s.unpushed.length ? '\n올리지 않은 커밋\n' + s.unpushed.join('\n') + '\n' : '')
+        + (s.files && s.files.length ? '\n변경 파일\n' + s.files.join('\n') + (s.dirty > s.files.length ? '\n…' : '') : '');
+      h += `<span class="mrepo" title="${esc(tip)}">${I.branch}<b>${esc(s.branch)}</b>${s.dirty ? ' · 변경 ' + s.dirty + '개' : ''}${s.ahead ? ' · 올리지 않은 커밋 ' + s.ahead + '건' : ''}${s.behind ? ' · 원격보다 ' + s.behind + '건 뒤' : ''}${!s.dirty && !s.ahead ? ' · 변경 없음' : ''}</span>`;
+    } else h += '<span class="mrepo">저장소 상태 확인 중…</span>';
+    h += '<span class="sp"></span>';
+    const live = mtLive() || !!(s && s.busy), dis = live ? 'disabled title="작업이 끝난 뒤에 누를 수 있습니다"' : '';
+    if (s && (s.ahead > 0 || (s.branch && !s.upstream && !s.error))) h += `<button class="btn sm" id="mtPush" ${dis}>푸시${s.ahead ? ' ' + s.ahead + '건' : ''}</button>`;
+    if (s && s.restartNeeded) h += `<button class="btn sm primary" id="mtRestart" ${live ? dis : 'title="새로 빌드된 jar 가 있습니다 — 재시작해야 반영됩니다"'}>${I.refresh}재시작 적용</button>`;
+    set(el, h);
+  }
+  async function mtSend() {
+    const inp = $('mtInput'), q = inp.value.trim(); if (!q || mt.sending) return;
+    if (mtLive()) { mtNote('앞선 요청을 처리하는 중입니다. 끝난 뒤(또는 중단한 뒤) 보내세요.', 'warn'); return; }
+    mt.sending = true; $('mtSend').disabled = true;
+    try {
+      const body = { question: q, model: $('mtModel').value }; if (mt.thread) body.threadId = mt.thread;
+      const r = await mtPost('/api/maintain', body);
+      if (!r.ok) { mtNote(r.result || '요청을 접수하지 못했습니다.', 'err'); return; }
+      inp.value = ''; mtNote(null);
+      mt.thread = r.threadId; mtLs(MT_THREAD, String(r.threadId));
+      await mtLoadThread(false);
+      const b = $('mtBody'); b.scrollTop = b.scrollHeight;
+      mtInfo();
+    } catch (e) { mtNote('요청을 보내지 못했습니다: ' + (e && e.message || e), 'err'); }
+    finally { mt.sending = false; mtRender(); }
+  }
+  async function mtAbort(id) {
+    if (!confirm('진행 중인 작업을 중단할까요?\n그때까지 고친 내용은 저장소에 그대로 남습니다.')) return;
+    try { const r = await mtPost('/api/maintain/' + id + '/abort'); mtNote(r.result, r.ok ? '' : 'err'); } catch (e) { mtNote('중단 요청 실패', 'err'); }
+    mtLoadThread(true);
+  }
+  async function mtPush() {
+    const s = mt.status || {};
+    if (!confirm(`${s.branch} 브랜치${s.ahead ? '의 커밋 ' + s.ahead + '건' : ''}을 origin 에 올릴까요?` + (s.unpushed && s.unpushed.length ? '\n\n' + s.unpushed.join('\n') : ''))) return;
+    mtNote('올리는 중…');
+    try { const r = await mtPost('/api/maintain/push'); mtNote(r.result, r.ok ? 'ok' : 'err'); } catch (e) { mtNote('푸시 요청 실패', 'err'); }
+    mtStatus();
+  }
+  async function mtRestart() {
+    if (!confirm('새로 빌드된 버전으로 플랫폼을 재시작할까요?\n10초쯤 화면이 끊겼다가 자동으로 다시 열립니다.')) return;
+    let r; try { r = await mtPost('/api/system/restart'); } catch (e) { mtNote('재시작 요청 실패', 'err'); return; }
+    if (!r.ok) { mtNote(r.result, 'err'); return; }
+    mtNote('재시작하는 중… 다시 연결되면 화면을 새로 엽니다.');
+    clearInterval(mt.timer); mt.timer = null;
+    let down = false;
+    for (let i = 0; i < 80; i++) {
+      await new Promise(ok => setTimeout(ok, 1500));
+      try {
+        const st = await mtGet('/api/system/status');
+        if (down || st.uptimeSec < 40) { try { sessionStorage.setItem('da-maint-reopen', '1'); } catch (_) {} window.top.location.reload(); return; }
+      } catch (_) { down = true; }
+    }
+    mtNote('2분이 지나도 다시 연결되지 않습니다. logs/dev-agent.log 를 확인하세요.', 'err');
+  }
+  function mtTick() {
+    const d = $('maintDlg'); if (!d || !d.open) { clearInterval(mt.timer); mt.timer = null; return; }
+    if (asleep()) return;
+    mt.tick++;
+    if (mtLive()) { mtLoadThread(true); }
+    if (mt.tick % 5 === 0) { mtStatus(); if (!mtLive()) mtInfo(); }
+  }
+  async function maintOpen() {
+    const info = mt.info && mt.info.enabled ? mt.info : await mtInfo();
+    if (!info || !info.enabled) { toast(info && info.reason ? '플랫폼 관리: ' + info.reason : '플랫폼 관리를 쓸 수 없습니다.', 'warn'); return; }
+    const d = mtBuild(); if (d.open) return;
+    d.showModal();
+    const fresh = await mtInfo() || info;
+    const want = fresh.runningThread || Number(mtLs(MT_THREAD)) || null;
+    mtSelect((fresh.threads || []).some(t => t.id === want) ? want : null);
+    mtStatus();
+    clearInterval(mt.timer); mt.tick = 0; mt.timer = setInterval(mtTick, 2000);
+    $('mtInput').focus();
+  }
+  function initMaint() {
+    const b = $('maintBtn'); if (!b) return;
+    b.innerHTML = I.tool;
+    try { b.hidden = sessionStorage.getItem('da-maint') !== '1'; } catch (_) { b.hidden = true; }   // 직전 값으로 먼저(화면을 옮길 때 깜빡이지 않게)
+    b.addEventListener('click', maintOpen);
+    // 알림함의 플랫폼 관리 알림(link '#maintain')을 누르면 창을 연다
+    $('noticeList').addEventListener('click', e => {
+      const a = e.target instanceof Element ? e.target.closest('a[href="#maintain"]') : null;
+      if (a) { e.preventDefault(); noticeToggle(false); maintOpen(); }
+    });
+    mtInfo().then(() => {
+      let re = false; try { re = sessionStorage.getItem('da-maint-reopen') === '1'; if (re && !embedded) sessionStorage.removeItem('da-maint-reopen'); } catch (_) {}
+      if (re && !embedded) maintOpen();   // 「재시작 적용」 뒤: 하던 대화로 돌아온다
+    });
+    every(mtInfo, 60000);
+  }
+
   // ---------- top bar ----------
   /**
    * 공통 상단바. active: 'home' | 'agent' | 'research' | 'messenger' | 'platform'. 두 페이지를 세그먼트 탭으로 오가며, 에이전트 상태 칩은 항상 노출(관리 페이지에서는 대시보드로 가는 링크).
-   * 단축키: Alt+1 홈, Alt+2 에이전트, Alt+3 리서치, Alt+4 메신저, Alt+5 플랫폼, Alt+T 테마, Alt+N 알림함.
+   * 단축키: Alt+1 홈, Alt+2 에이전트, Alt+3 리서치, Alt+4 메신저, Alt+5 플랫폼, Alt+T 테마, Alt+N 알림함, Alt+M 플랫폼 관리(채팅 창).
    */
   function topbar(active, subtitle) {
     const el = $('topbar'); if (!el) return;
@@ -173,6 +427,7 @@ window.UI = (() => {
             <div class="nlist" id="noticeList"></div>
           </div>
         </div>
+        <button class="icon-btn" id="maintBtn" title="플랫폼 관리 (Alt+M)" hidden></button>
         <button class="icon-btn" id="themeBtn" title="테마 전환 (Alt+T)"></button>
       </div>`;
     $('themeBtn').addEventListener('click', toggleTheme);
@@ -182,13 +437,14 @@ window.UI = (() => {
       if (c) { $('agentChip').className = 'chip ' + c.k; $('agentChip').innerHTML = '<span class="dot"></span><span>' + esc(c.text) + '</span>' + (active === 'agent' ? '' : '<span style="opacity:.6">' + I.arrow + '</span>'); }
     } catch (_) {}
     initNotices(active);
+    initMaint();
     applyTheme(document.documentElement.dataset.theme);
     startUsageBattery();
     loadVersion();
     document.addEventListener('keydown', e => {
       if (!e.altKey || e.ctrlKey || e.metaKey) return;
       const go = { '1': '/home.html', '2': '/agent.html', '3': '/research.html', '4': '/messenger.html', '5': '/platform.html' }[e.key];
-      if (go) { e.preventDefault(); if (!nav(go)) location.href = go; } else if (e.key.toLowerCase() === 't') { toggleTheme(); } else if (e.key.toLowerCase() === 'n') { e.preventDefault(); noticeToggle(); }
+      if (go) { e.preventDefault(); if (!nav(go)) location.href = go; } else if (e.key.toLowerCase() === 't') { toggleTheme(); } else if (e.key.toLowerCase() === 'n') { e.preventDefault(); noticeToggle(); } else if (e.key.toLowerCase() === 'm') { e.preventDefault(); maintOpen(); }
     });
   }
 
@@ -506,6 +762,6 @@ window.UI = (() => {
     return k => { let v = m.get(k); if (v === undefined) { if (m.size >= max) m.clear(); m.set(k, v = fn(k)); } return v; };
   }
 
-  const api = { $, esc, fmt, hhmm, ago, dur, num, KOR, cls, isActive, I, toast, every, asleep, go, nav, _active: setActive, _sync: sync, _warm: warm, set, memo, swapOut, swapIn, splitter, topbar, setAgentChip, pollAgentChip, toggleTheme, applyTheme, startUsageBattery, renderBattery };
+  const api = { $, esc, fmt, hhmm, ago, dur, num, KOR, cls, isActive, I, toast, every, asleep, go, nav, _active: setActive, _sync: sync, _warm: warm, set, memo, swapOut, swapIn, splitter, topbar, setAgentChip, pollAgentChip, toggleTheme, applyTheme, startUsageBattery, renderBattery, maintOpen };
   return api;
 })();

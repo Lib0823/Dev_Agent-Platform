@@ -14,6 +14,7 @@
 | 루틴(예약 질의) | `routine/`, `admin/RoutineController` | 요일·시각마다 같은 질문을 질의 워크플로우에 접수(1분 틱). 리서치 탭 "예약" · 루틴 목록 |
 | 기동·배포 | `boot/`, `gradle/dist.gradle`, `admin/SystemController`, `ops/Doctor` | `.env` 틀·메신저 없음 모드·내장 DB(`Bootstrap`/`EmbeddedDb`), 실행 파일 모드 감시자+트레이(`Launcher`), 설치 점검·재시작·구성 묶음 |
 | 알림함 | `notify/`, `admin/NotificationController`, `ui.js` | 상단 종 버튼(Alt+N): 화면 토스트 기록(localStorage) + 플랫폼 알림(이슈·질의·시스템, `notification` 테이블)을 합쳐 보여 준다. 메신저와 독립 |
+| 플랫폼 관리 | `maintain/`, `admin/MaintainController`, `ui.js`(mt*) | 상단 렌치 버튼(Alt+M) 채팅 창: 이 저장소를 작업 디렉터리로 한 Claude 세션이 플랫폼 자체의 버그 확인·수정·빌드·커밋·스킬 등록. 푸시·재시작은 창의 버튼 |
 | 운영 MCP | `mcp/` | opensearch/postgres/k3s-ops 읽기 전용 도구를 Claude CLI 에 `--mcp-config` 로 제공. 자기방 `@AI 운영 …` 질의, 에이전트 분석/수정에 활용 |
 | 로컬 프리뷰 | `preview/`, `scripts/bin/preview` | worktree → Maven WAR → 봇 호스트 Tomcat 배포 → Playwright MCP 로 화면 검증·스크린샷 |
 
@@ -49,7 +50,18 @@ LLM 호출은 전부 **Claude Code CLI(headless)** 다. 채팅은 warm stream-js
 ## 버전 (11-17)
 
 - `build.gradle` 의 `version` 한 곳(major.minor.patch) → `buildInfo()` → `/api/system/status` → 상단바 배터리 왼쪽 `v1.1.0`·플랫폼 시스템 카드·배포 파일 이름. 시작은 1.0.0(첫 실행 파일 배포), 알림함부터 1.1.0.
+- 플랫폼 관리(렌치 버튼 채팅 창)부터 1.8.0.
 - 올리는 기준: **major** = 기존 설치가 그대로는 안 도는 변경(설정 키·DB 스키마 비호환, 실행 방식 변경) / **minor** = 기능 추가(화면·API·설정 추가, 하위 호환) / **patch** = 버그 수정·문구·내부 정리. 사용자에게 보이는 변경을 커밋할 때 같이 올린다(문서만 고친 커밋은 그대로).
+
+## 플랫폼 관리 (11-23, 1.8.0)
+
+- 목적: 플랫폼 자체를 고치려고 터미널에서 Claude Code 를 켜는 일을 화면 안으로. `MaintainService` 가 **이 소스 저장소를 cwd 로** `CodingAgent.run(…, Stage.FIX, Overrides(source="maintain"))` 을 돌린다(그래서 이 CLAUDE.md 가 그 세션에도 읽힌다). worktree 없음 → 한 번에 한 요청(`submit` 이 진행 중이면 거부), 대화(`maintain_turn.thread_id`)마다 세션 하나를 `--resume`. 이벤트는 `IssueEventBus` 공유(세션 id = `EVENT_BASE(20억)` + 차례 id).
+- **세션은 push·재시작을 하지 않는다.** 세션은 봇의 자식 프로세스라 재시작하면 같이 죽고(재기동 때 RUNNING 은 FAILED 로 닫고 「이어서 진행해 줘」로 같은 세션 재개), 푸시는 사람이 본 뒤 올린다. `ClaudeCliAgent` 가 source 가 `maintain` 이면 `--disallowedTools Bash(git push:*)` 를 붙이고, 프리뷰 도구·안내와 운영 MCP 를 빼고, JAVA_HOME 을 프리뷰 JDK(21)가 아닌 이 JVM 의 JDK 로 둔다. 창의 「푸시」= `MaintainService.push()`(`git push -u origin <현재 브랜치>`, 강제 없음), 「재시작 적용」= 기존 `/api/system/restart`(`busyCount` 에 `maintain.busy()` 포함). 「재시작 적용」은 `build/libs/dev-agent.jar` 수정 시각이 JVM 시작보다 나중일 때만 보인다.
+- 켜지는 조건: `maintain.repo-dir` 가 비면 실행 디렉터리가 소스 저장소(`.git`·`build.gradle`·`src/main/java`, `isSourceRepo`)일 때만. 배포판은 꺼져 있고 버튼도 숨는다(`GET /api/maintain` 의 `enabled`). 허용 도구는 `maintain.tools`.
+- 상태를 바꾸는 API(`POST /api/maintain`, `…/abort`, `/push`)는 전부 `SystemController.foreign(req)` 확인 — 요청이 코드 수정 세션으로 이어지므로 다른 사이트 페이지가 지시를 밀어 넣지 못하게. 새 엔드포인트를 추가할 때도 지킬 것.
+- 화면은 `ui.js` 의 "플랫폼 관리" 블록 하나(모든 탭 공통, `dialog.maint`). **SSE 를 쓰지 않고** 창이 열린 동안만 폴링한다(진행 중 2초, 저장소 상태 10초) — 탭 문서마다 연결을 열면 호스트당 6개 제한에 닿는다. 창(dialog)이 떠 있으면 토스트가 가려지므로 안내는 `mtNote`(창 안 한 줄). 알림함 항목의 link `#maintain` 은 창을 여는 신호.
+- 스킬 단계 키에 `maintain` 추가(`AgentSkill.STAGES`). 예전에 "전 단계"로 저장된 스킬은 네 단계가 명시돼 있어 플랫폼 관리 세션에는 실리지 않는다(대상 프로젝트용 지침이 섞이지 않게 — 의도된 동작).
+- 이 세션(Claude Code)의 Bash 도구에서 **작은따옴표가 든 따옴표 친 heredoc(`<<'EOF'`)은 "unexpected EOF" 로 깨진다**(11-23 두 번 실측). 여러 파일을 스크립트로 고칠 때는 스크립트를 Write 도구로 파일에 쓴 뒤 실행.
 
 ## 알림함 (11-17)
 

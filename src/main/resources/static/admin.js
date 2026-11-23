@@ -154,8 +154,8 @@ async function mcpDelete(name) {
 }
 
 // ---------------------------------------------------------------- 스킬 (등록·수정·삭제)
-const STAGE_KO2 = { analyze: '분석·설계', fix: '코드 수정', verify: '검증', research: '리서치' };
-let skillList = [], skillStages = ['analyze', 'fix', 'verify', 'research'];
+const STAGE_KO2 = { analyze: '분석·설계', fix: '코드 수정', verify: '검증', research: '리서치', maintain: '플랫폼 관리' };
+let skillList = [], skillStages = ['analyze', 'fix', 'verify', 'research', 'maintain'];
 async function loadSkills() {
   let d; try { d = await (await fetch('/api/skills')).json(); } catch (e) { $('skillList').innerHTML = '<div class="hint">조회 실패</div>'; return; }
   skillList = d.skills || []; skillStages = d.stages || skillStages;

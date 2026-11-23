@@ -26,7 +26,7 @@
 
 ## 화면
 
-`http://localhost:8777/` 로 들어갑니다. 다섯 탭이 같은 디자인 시스템(`ui.css`/`ui.js`)을 쓰며 Alt+1~5 와 테마(Alt+T)로 오갑니다. 아래 그림은 가상의 프로젝트(`acme/shop/…`) 데이터로 찍은 것이고, 메신저 칸의 `slack` 은 어댑터를 붙였을 때의 예시입니다(이 저장소에는 메신저 없음 어댑터만 들어 있습니다).
+`http://localhost:8777/` 로 들어갑니다. 다섯 탭이 같은 디자인 시스템(`ui.css`/`ui.js`)을 쓰며 Alt+1~5 와 테마(Alt+T)로 오갑니다. 상단바 오른쪽 렌치 버튼(Alt+M)은 플랫폼 자체를 고치는 **플랫폼 관리** 채팅 창입니다(아래 「플랫폼 관리」). 아래 그림은 가상의 프로젝트(`acme/shop/…`) 데이터로 찍은 것이고, 메신저 칸의 `slack` 은 어댑터를 붙였을 때의 예시입니다(이 저장소에는 메신저 없음 어댑터만 들어 있습니다).
 
 | 탭 | 주소 | 내용 |
 |---|---|---|
@@ -260,6 +260,17 @@ Spring MVC + JSP 처럼 WAR 가 떠야 화면을 볼 수 있는 Maven 프로젝�
 
 ![리서치 2차 검증 내역](docs/images/research-verify.png)
 
+### 플랫폼 관리 — 상단바 렌치 버튼 (Alt+M)
+
+플랫폼 자체에 문제가 있거나 고치고 싶은 것이 있을 때 터미널에서 Claude Code 를 켜지 않고 **화면 안에서 채팅으로** 맡깁니다. 상단바 오른쪽 렌치 버튼(Alt+M)을 누르면 채팅 창이 뜨고, 요청은 **이 플랫폼의 소스 저장소를 작업 디렉터리로 한 Claude 세션**이 처리합니다.
+
+- **할 수 있는 일**: 버그 확인(소스 · `logs/dev-agent.log` · 로컬 API)과 수정, 기능 추가, `gradlew test bootJar`, git 커밋, 스킬 등록·수정, 문서 갱신. 저장소의 `CLAUDE.md` 를 그대로 읽으므로 터미널 세션과 같은 규칙으로 일합니다.
+- **대화**: 대화마다 Claude 세션 하나이고 이어지는 요청은 `--resume` 으로 맥락을 유지합니다(위 선택 상자로 지난 대화 전환, 「새 대화」는 새 세션). 창을 닫아도 작업은 계속되고 끝나면 알림함에 남습니다. 진행 중에는 도구 호출이 실시간으로 보이고 「중단」할 수 있습니다.
+- **푸시와 재시작은 세션이 하지 않습니다.** 세션은 플랫폼의 자식 프로세스라 재시작하면 함께 끊기고, 푸시는 사람이 커밋을 보고 올리도록 `git push` 를 막아 두었습니다. 창 아래 상태 줄(브랜치 · 변경 파일 · 올리지 않은 커밋)에 **「푸시」**(올릴 커밋이 있을 때)와 **「재시작 적용」**(지금 떠 있는 것보다 새 jar 가 빌드됐을 때) 버튼이 나타납니다. 재시작하면 화면이 다시 열리고 같은 대화로 돌아옵니다.
+- **한 번에 한 요청**: worktree 를 따로 두지 않고 저장소에서 직접 고치기 때문입니다(실행 중인 jar 는 `run/` 의 사본이라 빌드해도 안전). 요청 처리 중에는 재시작이 거부됩니다.
+- **켜지는 조건**: 실행 디렉터리가 소스 저장소일 때(소스에서 띄운 경우) 설정 없이 켜집니다. 실행 파일 패키지에는 소스가 없으므로 버튼이 보이지 않으며, 소스를 받아 둔 경로를 `MAINTAIN_REPO_DIR` 에 지정하면 켜집니다.
+- **한계**: 플랫폼이 아예 뜨지 않는 장애는 이 창으로 고칠 수 없습니다(그때는 터미널). 대화는 `maintain_turn` 테이블, 활동 로그는 `issue_event`(세션 id = 20억 + 차례 id), 사용량은 `maintain` 으로 따로 집계됩니다. 스킬 카드의 적용 단계 「플랫폼 관리」를 고르면 이 세션에만 실리는 지침을 둘 수 있습니다.
+
 ### MCP 서버 · 스킬 관리 (플랫폼 탭)
 
 - **MCP 서버**: 내장 3개(opensearch · postgres · k3s-ops, `.env` 로 관리) 외에 "운영 MCP" 카드에서 서버를 등록·수정·삭제합니다(http / sse / stdio). 저장하면 `work/mcp-servers.json` 을 다시 만들어 다음 실행부터 운영 질의와 에이전트에 반영됩니다(재시작 불필요). **비밀값은 저장하지 않습니다** — 인증·토큰·키류 헤더는 `${ENV_NAME}` 자리표시자만 받고 실제 값은 `.env` 에 둡니다(없으면 화면에 "env 없음" 표시). 허용 도구를 비우면 서버의 모든 도구가 허용되므로, 변경 도구가 있는 서버는 조회 도구 이름만 적습니다.
@@ -367,6 +378,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File install-autostart.ps1   # �
 | `GITLAB_AGENT_TIMEOUT_MS` / `GITLAB_AGENT_MAX_TURNS` / `GITLAB_AGENT_FIX_TIMEOUT_MS` / `GITLAB_AGENT_FIX_MAX_TURNS` / `GITLAB_AGENT_IDLE_TIMEOUT_MS` | 분석 60분/80턴 · 개발 4시간/600턴 · 무응답 20분 |
 | `GITLAB_VERIFY_ENABLED` / `GITLAB_VERIFY_MAX_RETRIES` / `GITLAB_VERIFY_REVIEWER` / `GITLAB_VERIFY_MODEL` / `GITLAB_VERIFY_EFFORT` / `GITLAB_VERIFY_COMMANDS` / `GITLAB_VERIFY_REVIEWER_TIMEOUT_MS` | 검증 단계 · 자동 재수정 2회 · 독립 리뷰어 · 리뷰어 모델/노력 · 프로젝트별 검사 명령 · 리뷰어 상한 60분 |
 | `RESEARCH_ENABLED` / `RESEARCH_TIMEOUT_MS` / `RESEARCH_MAX_TURNS` / `RESEARCH_MODEL` / `RESEARCH_EFFORT` / `RESEARCH_VERIFY` | 질의 워크플로우 · 질문 1건 상한 30분/60턴 · 기본 모델/노력(비우면 기획 모델) · 2차 검증 기본값 |
+| `MAINTAIN_ENABLED` / `MAINTAIN_REPO_DIR` / `MAINTAIN_MODEL` / `MAINTAIN_EFFORT` / `MAINTAIN_TIMEOUT_MS` / `MAINTAIN_MAX_TURNS` / `MAINTAIN_TOOLS` | 플랫폼 관리(렌치 버튼 채팅 창) · 소스 저장소 경로(비우면 실행 디렉터리가 소스 저장소일 때만 켜짐) · 기본 모델/노력(비우면 '개발') · 요청 1건 상한 2시간/300턴 · 허용 도구(`git push` 는 넣어도 금지) |
 | `PREVIEW_ENABLED` / `PREVIEW_LOGIN_ID` / `PREVIEW_LOGIN_PW` / `PREVIEW_START_TIMEOUT_MS` | 로컬 프리뷰 · 로그인 테스트 계정 · 기동 대기 상한(15분) |
 | `PLATFORM_MESSENGER` / `PLATFORM_CHAT_MODEL` / `PLATFORM_CODING_AGENT` / `PLATFORM_KNOWLEDGE` | 포트 구현체 선택(기본 none / claude-cli / claude-cli / mkdocs-keyword) |
 | `BOT_JAVA_OPTS`(환경변수) | 봇 JVM 옵션. 기본 `-XX:+UseSerialGC -Xms32m -Xmx512m -XX:TieredStopAtLevel=1`(로컬 경량 운용) |
@@ -395,10 +407,11 @@ src/main/java/io/github/lib0823/devagent/
               · VerifyService(봇 검사·리뷰어 프롬프트) · GitRunner(worktree·참고 저장소·컨벤션 브랜치·푸시 가드) · GitLabClient
               · IssueSession/IssueEvent(Mapper) · IssueEventBus(DB 기록 + SSE)
   research/   ResearchService(질의 워크플로우: 읽기 전용 worktree · 세션 --resume · 단일 워커) · ResearchJob(Mapper)
+  maintain/   MaintainService(플랫폼 관리: 소스 저장소에서 도는 세션 · 대화 --resume · 저장소 상태 · 푸시) · MaintainTurn(Mapper) · MaintainPrompts
   skill/      SkillService(플랫폼 스킬 등록·수정·삭제, 단계별 프롬프트 주입) · AgentSkill(Mapper)
   platform/   PortHealth(포트 상태) · CallStats(최근 호출 성공/실패 기록)
   preview/    PreviewService(Maven WAR → Tomcat 배포·핫 동기화·공유 대기)
-  admin/      AdminController · AgentMonitorController(대시보드 API/SSE) · ResearchController(질의 API) · PlatformController(활성 어댑터) · McpController · PreviewController · SettingService
+  admin/      AdminController · AgentMonitorController(대시보드 API/SSE) · ResearchController(질의 API) · MaintainController(플랫폼 관리 API) · PlatformController(활성 어댑터) · McpController · PreviewController · SettingService
 src/main/resources/   application.yml · static/home.html(홈) · agent.html(에이전트) · research.html(리서치) · messenger.html(메신저) · platform.html(플랫폼) · admin.js·admin.css(홈·메신저·플랫폼 공통) · ui.css·ui.js
 scripts/bin/          preview · jscheck · jspcheck (에이전트가 Bash 로 호출, ~/bin 심으로 복사됨)
 scripts/              setup-preview.ps1 · preview-tomcat.cmd
