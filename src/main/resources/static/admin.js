@@ -203,6 +203,10 @@ async function skillSave() {
     toast(r.result, r.ok ? 'ok' : 'err'); if (r.ok) { skillFormClose(); loadSkills(); }
   } catch (e) { toast('저장 실패', 'err'); }
 }
+async function skillDefaults() {
+  try { const r = await (await fetch('/api/skills/defaults', { method: 'POST' })).json(); toast(r.result, r.ok ? 'ok' : 'err'); loadSkills(); }
+  catch (e) { toast('기본 스킬 넣기 실패', 'err'); }
+}
 async function skillDelete(name) {
   if (!confirm(`스킬 '${name}' 를 삭제할까요?`)) return;
   try { const r = await (await fetch('/api/skills/delete?name=' + encodeURIComponent(name), { method: 'POST' })).json(); toast(r.result, r.ok ? 'ok' : 'err'); loadSkills(); }

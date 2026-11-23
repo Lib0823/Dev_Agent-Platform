@@ -36,6 +36,14 @@ public interface AgentSkillMapper {
             """)
     int upsert(AgentSkill s);
 
+    /** 같은 이름이 없을 때만 넣는다(기본 스킬 심기용 — 사용자가 고친 스킬을 덮어쓰지 않는다). */
+    @Insert("""
+            INSERT INTO agent_skill (name, description, body, stages, enabled)
+            VALUES (#{name}, #{description}, #{body}, #{stages}, #{enabled})
+            ON CONFLICT (name) DO NOTHING
+            """)
+    int insertIfAbsent(AgentSkill s);
+
     @Delete("DELETE FROM agent_skill WHERE name = #{name}")
     int delete(@Param("name") String name);
 }

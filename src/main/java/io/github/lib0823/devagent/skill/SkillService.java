@@ -1,6 +1,7 @@
 package io.github.lib0823.devagent.skill;
 
 import jakarta.annotation.PostConstruct;
+import io.github.lib0823.devagent.admin.SettingService;
 import io.github.lib0823.devagent.config.GitLabProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,12 +33,17 @@ public class SkillService {
     /** 프롬프트에 그대로 싣는 스킬 본문의 합계 상한. 넘는 스킬은 파일 참조로 돌린다. */
     static final int NOTE_MAX = 6_000;
 
+    /** 기본 스킬을 이미 심었다는 표시(bot_setting). 있으면 다시 심지 않는다 — 사용자가 지운 스킬이 재시작 때 되살아나지 않게. */
+    static final String SEEDED_KEY = "skills_seeded";
+
     private final AgentSkillMapper mapper;
+    private final SettingService settings;
     private final Path dir;
     private volatile List<AgentSkill> cache = List.of();
 
-    public SkillService(AgentSkillMapper mapper, GitLabProperties gitlab) {
+    public SkillService(AgentSkillMapper mapper, GitLabProperties gitlab, SettingService settings) {
         this.mapper = mapper;
+        this.settings = settings;
         this.dir = Path.of(gitlab.workDir() == null || gitlab.workDir().isBlank() ? "work" : gitlab.workDir()).toAbsolutePath().resolve("skills");
     }
 
@@ -45,10 +51,42 @@ public class SkillService {
     void init() {
         try {
             mapper.ensureTable();
+            seedDefaults();
             reload();
         } catch (RuntimeException e) {
             log.warn("스킬 테이블 준비 실패(스킬 없이 진행): {}", e.toString());
         }
+    }
+
+    /**
+     * 기본 스킬({@link DefaultSkills})을 설치당 한 번만 심는다. 같은 이름이 이미 있으면 건드리지 않고,
+     * 심은 뒤에는 표시를 남겨 사용자가 고치거나 지운 것을 되돌리지 않는다.
+     */
+    void seedDefaults() {
+        if (settings.getRaw(SEEDED_KEY) != null) {
+            return;
+        }
+        int n = insertDefaults();
+        settings.setRaw(SEEDED_KEY, "1");
+        log.info("기본 스킬 {}개를 넣었습니다(플랫폼 탭 스킬 카드에서 수정·끄기·삭제 가능)", n);
+    }
+
+    /** 화면의 「기본 스킬 다시 넣기」: 지워서 없는 기본 스킬만 다시 넣는다(있는 것은 그대로). 넣은 개수. */
+    public int restoreDefaults() {
+        int n = insertDefaults();
+        settings.setRaw(SEEDED_KEY, "1");
+        reload();
+        return n;
+    }
+
+    private int insertDefaults() {
+        int n = 0;
+        for (AgentSkill s : DefaultSkills.all()) {
+            if (validate(s) == null) {
+                n += mapper.insertIfAbsent(s);
+            }
+        }
+        return n;
     }
 
     public List<AgentSkill> list() {
