@@ -9,6 +9,11 @@ import io.github.lib0823.devagent.gitlab.IssueEventBus;
 import io.github.lib0823.devagent.llm.UsageService;
 import io.github.lib0823.devagent.mcp.McpConfigService;
 import io.github.lib0823.devagent.notify.NotificationService;
+import io.github.lib0823.devagent.skill.AgentSkill;
+import io.github.lib0823.devagent.skill.SkillService;
+import com.fasterxml.jackson.databind.JsonNode;
+import org.springframework.beans.factory.annotation.Value;
+import java.nio.charset.StandardCharsets;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -51,10 +56,13 @@ public class WorkspaceService {
     public static final long EVENT_BASE = 3_000_000_000L;
     public static final String SOURCE = "workspace";
     public static final List<String> MODELS = List.of("fable", "opus", "sonnet", "haiku");
-    public static final List<String> MODES = List.of(Workspace.READ, Workspace.EDIT, Workspace.FULL);
-    private static final List<String> READ_TOOLS = List.of("Read", "Grep", "Glob", "LS", "WebSearch", "WebFetch");
-    private static final List<String> EDIT_TOOLS = List.of("Edit", "Write", "MultiEdit", "NotebookEdit");
-    private static final int MAX_QUESTION = 8000;
+    public static final List<String> MODES = List.of(Workspace.BYPASS, Workspace.ASK);
+    /** 확인 대기 상한: 에이전트 무응답 상한(45분)보다 짧아야 답이 없을 때 세션이 죽지 않고 "거부"로 이어진다. */
+    private static final long ASK_WAIT_MS = 40 * 60_000L;
+    /** 「확인 후 실행」에서 묻지 않는 도구: 폴더 안을 읽고 찾는 것만(웹 접근·수정·실행은 확인을 거친다). */
+    private static final List<String> READ_TOOLS = List.of("Read", "Grep", "Glob", "LS");
+    /** 요청 길이 상한. 리서치 결과를 붙여 넘기는 경우가 있어 넉넉히 둔다(프롬프트는 표준 입력으로 넘어가 명령행 제한과 무관). */
+    private static final int MAX_QUESTION = 24_000;
     private static final int MAX_WORKSPACES = 50;
 
     private final WorkspaceProperties props;
@@ -65,14 +73,27 @@ public class WorkspaceService {
     private final UsageService usage;
     private final NotificationService notifications;
     private final McpConfigService mcp;
+    private final SkillService skills;
+    private final WorkspaceApprovals approvals;
+    private final int adminPort;
+    /** 「확인 후 실행」 차례의 확인 도구 설정 파일(차례 id → 임시 파일). 끝나면 지운다. */
+    private final Map<Long, Path> askFiles = new ConcurrentHashMap<>();
+    /** 확인 필요 알림을 이미 남긴 차례. */
+    private final Set<Long> askNotified = ConcurrentHashMap.newKeySet();
 
     private final ExecutorService worker;
     /** 지금 실행 중인 차례 id(작업 스레드가 잡은 것). */
     private final Set<Long> running = ConcurrentHashMap.newKeySet();
     private final Set<Long> abortRequested = ConcurrentHashMap.newKeySet();
+    /** 실행 직전의 폴더 스냅샷(차례 id → 경로별 수정 시각·크기). 끝날 때 비교해 바뀐 파일을 남긴다. */
+    private final Map<Long, Map<String, long[]>> snapshots = new ConcurrentHashMap<>();
 
     public WorkspaceService(WorkspaceProperties props, WorkspaceMapper mapper, CodingAgent agent, IssueEventBus events,
-                            SettingService settings, UsageService usage, NotificationService notifications, McpConfigService mcp) {
+                            SettingService settings, UsageService usage, NotificationService notifications, McpConfigService mcp,
+                            SkillService skills, WorkspaceApprovals approvals, @Value("${server.port:8777}") int adminPort) {
+        this.skills = skills;
+        this.approvals = approvals;
+        this.adminPort = adminPort;
         this.props = props;
         this.mapper = mapper;
         this.agent = agent;
@@ -98,7 +119,10 @@ public class WorkspaceService {
         mapper.ensureTable();
         mapper.ensureTurnTable();
         mapper.ensureIndex();
-        events.ensureTable();                         // GitLab 이 꺼져 있어도 이벤트 테이블은 필요하다(멱등)
+        mapper.ensureChangedColumn();
+        mapper.ensureSkillsColumn();
+        mapper.migrateModes();
+        events.ensureTable();                        // GitLab 이 꺼져 있어도 이벤트 테이블은 필요하다(멱등)
         // 재기동 시 진행 중이던 요청: 중간 상태를 알 수 없으므로 실패로 닫는다. 폴더의 변경과 세션은 남아 있어 이어서 요청할 수 있다
         for (WorkspaceTurn t : mapper.findActive()) {
             boolean started = WorkspaceTurn.RUNNING.equals(t.getState());
@@ -125,30 +149,147 @@ public class WorkspaceService {
         return EVENT_BASE + turnId;
     }
 
-    // ---------------------------------------------------------------- 권한(도구)
+    // ---------------------------------------------------------------- 권한: 묻지 않고 실행(bypass) / 확인 후 실행(ask)
 
-    /** 권한 범위에 따른 허용 도구. full 의 Bash 는 접두 제한 없이 전부(사용자가 자기 폴더에 준 권한). */
-    static List<String> allowTools(String mode) {
-        List<String> t = new ArrayList<>(READ_TOOLS);
-        if (!Workspace.READ.equals(mode)) {
-            t.addAll(EDIT_TOOLS);
-        }
-        if (Workspace.FULL.equals(mode)) {
-            t.add("Bash");
-        }
-        return t;
+    /**
+     * 「확인 후 실행」에서 묻지 않고 허용하는 도구(읽기·검색). 그 밖의 도구(파일 수정·명령 실행 등)는 CLI 가 확인 도구를 불러 사용자 답을 기다린다.
+     * 「묻지 않고 실행」은 허용 목록과 무관하게 전부 실행된다.
+     */
+    static List<String> askFreeTools() {
+        return READ_TOOLS;
     }
 
-    /** 권한 범위에 따른 금지 도구. 편집 자동 승인 모드에서는 허용 목록에 없어도 편집이 되므로 읽기 전용은 명시적으로 막아야 한다. */
-    static List<String> denyTools(String mode) {
-        List<String> t = new ArrayList<>();
-        if (Workspace.READ.equals(mode)) {
-            t.addAll(EDIT_TOOLS);
+    /** 확인 창에 보여 줄 한 줄 요약: 명령이면 명령, 파일 도구면 경로, 그 밖에는 입력 앞부분. */
+    static String summarize(String tool, JsonNode input) {
+        if (input == null || input.isMissingNode()) {
+            return "";
         }
-        if (!Workspace.FULL.equals(mode)) {
-            t.add("Bash");
+        for (String k : List.of("command", "file_path", "notebook_path", "path", "url", "query", "pattern", "description", "prompt")) {
+            if (input.hasNonNull(k)) {
+                return abbreviate(input.get(k).asText().replaceAll("\\s+", " "), 300);
+            }
         }
-        return t;
+        return abbreviate(input.toString(), 300);
+    }
+
+    /** 확인 창의 상세: 바꾸려는 내용(이전 → 이후)이나 쓰려는 내용, 그 밖에는 입력 전체. */
+    static String detail(String tool, JsonNode input) {
+        if (input == null || input.isMissingNode()) {
+            return "";
+        }
+        String d;
+        if (input.hasNonNull("old_string") || input.hasNonNull("new_string")) {
+            d = "[이전]\n" + input.path("old_string").asText("") + "\n\n[이후]\n" + input.path("new_string").asText("");
+        } else if (input.hasNonNull("content")) {
+            d = input.get("content").asText();
+        } else if (input.hasNonNull("command")) {
+            d = input.get("command").asText() + (input.hasNonNull("description") ? "\n\n# " + input.get("description").asText() : "");
+        } else {
+            d = input.toPrettyString();
+        }
+        return d.length() <= 6000 ? d : d.substring(0, 6000) + "\n…(이하 생략)";
+    }
+
+    /**
+     * 확인 도구가 부른다: 사용자에게 묻고 답을 기다린다(최대 {@link #ASK_WAIT_MS} — 에이전트 무응답 상한 45분보다 짧게).
+     * 활동 로그에 대기·결과를 남겨 화면이 알 수 있게 한다.
+     */
+    public WorkspaceApprovals.Decision askUser(String token, String tool, JsonNode input) {
+        Long turnId = approvals.turnOf(token);
+        String sum = summarize(tool, input);
+        // 작업 공간 안의 경로는 상대 경로로 줄여 보여 준다(긴 절대 경로에 파일 이름이 묻힌다)
+        WorkspaceTurn turn = turnId == null ? null : mapper.find(turnId);
+        Workspace ws = turn == null ? null : mapper.findWorkspace(turn.getWorkspaceId());
+        if (ws != null && sum.length() > ws.getPath().length() + 1
+                && sum.regionMatches(true, 0, ws.getPath(), 0, ws.getPath().length())
+                && "\\/".indexOf(sum.charAt(ws.getPath().length())) >= 0) {
+            sum = sum.substring(ws.getPath().length() + 1).replace('\\', '/');
+        }
+        if (turnId != null) {
+            events.emit(eventId(turnId), IssueEvent.INFO, "확인 대기 — " + tool + (sum.isEmpty() ? "" : ": " + abbreviate(sum, 120)));
+            // 다른 탭을 보고 있어도 알 수 있게 알림함에 남긴다(요청 하나에 한 번만 — 확인마다 남기면 시끄럽다)
+            if (ws != null && askNotified.add(turnId)) {
+                notifications.add(SOURCE, "warn", ws.getName() + " 확인 필요: " + tool + (sum.isEmpty() ? "" : " " + abbreviate(sum, 60)),
+                        "실행 전 확인을 기다리고 있습니다. 답이 없으면 40분 뒤 거부로 처리됩니다.",
+                        "/workspace.html#w=" + ws.getId() + "&t=" + turn.getThreadId());
+            }
+        }
+        WorkspaceApprovals.Decision d = approvals.await(token, tool, sum, detail(tool, input), ASK_WAIT_MS);
+        if (turnId != null) {
+            events.emit(eventId(turnId), IssueEvent.REPLY, (d.allow() ? "허용 — " : "거부 — ") + tool
+                    + (d.message() == null ? "" : " (" + abbreviate(d.message(), 120) + ")"));
+        }
+        return d;
+    }
+
+    /** 화면의 허용/거부. */
+    public boolean decide(long approvalId, boolean allow, boolean remember, String message) {
+        return approvals.decide(approvalId, allow, remember, message);
+    }
+
+    // ---------------------------------------------------------------- 폴더 찾아보기(등록할 폴더 고르기)
+
+    /** 찾아보기를 시작할 위치: 설정한 기본 폴더 → 사용자 홈. */
+    Path browseStart() {
+        if (props.baseDir() != null && !props.baseDir().isBlank()) {
+            try {
+                Path p = Path.of(props.baseDir().strip());
+                if (Files.isDirectory(p)) {
+                    return p;
+                }
+            } catch (InvalidPathException ignore) {
+                // 잘못된 설정은 무시하고 홈에서 시작
+            }
+        }
+        return Path.of(System.getProperty("user.home", "."));
+    }
+
+    /** 폴더 한 단계(하위 폴더 이름만) + 바로 가기(기본 폴더·홈·바탕 화면·문서·이미 등록한 작업 공간의 상위 폴더). */
+    public Map<String, Object> browse(String dir) {
+        requireEnabled();
+        Map<String, Object> out = WorkspaceFiles.browse(dir, browseStart());
+        Map<String, String> sc = new LinkedHashMap<>();
+        Path home = Path.of(System.getProperty("user.home", "."));
+        Path start = browseStart();
+        if (!start.equals(home)) {
+            sc.put(start.toString(), "기본 폴더");
+        }
+        sc.put(home.toString(), "홈");
+        for (String[] n : new String[][]{{"Desktop", "바탕 화면"}, {"Documents", "문서"}, {"Downloads", "다운로드"}}) {
+            Path p = home.resolve(n[0]);
+            if (Files.isDirectory(p)) {
+                sc.putIfAbsent(p.toString(), n[1]);
+            }
+        }
+        for (Workspace w : mapper.workspaces()) {
+            try {
+                Path parent = Path.of(w.getPath()).getParent();
+                if (parent != null && Files.isDirectory(parent)) {
+                    sc.putIfAbsent(parent.toString(), parent.getFileName() == null ? parent.toString() : parent.getFileName().toString());
+                }
+            } catch (InvalidPathException ignore) {
+                // 건너뜀
+            }
+        }
+        List<Map<String, String>> list = new ArrayList<>();
+        sc.forEach((p, n) -> list.add(Map.of("name", n, "path", p)));
+        out.put("shortcuts", list.size() > 8 ? list.subList(0, 8) : list);
+        // 지금 위치를 그대로 등록할 수 있는가(루트·홈 자체는 안 된다)
+        try {
+            checkPath((String) out.get("dir"), home);
+            out.put("selectable", true);
+        } catch (IllegalArgumentException e) {
+            out.put("selectable", false);
+            out.put("reason", e.getMessage());
+        }
+        String cur = (String) out.get("dir");
+        for (Workspace w : mapper.workspaces()) {
+            if (w.getPath().equalsIgnoreCase(cur)) {
+                out.put("selectable", false);
+                out.put("reason", "이미 등록된 폴더입니다: " + w.getName());
+            }
+        }
+        return out;
     }
 
     // ---------------------------------------------------------------- 작업 공간 등록
@@ -199,10 +340,10 @@ public class WorkspaceService {
     }
 
     /** 등록(id 없음) 또는 수정. 실행 중인 작업 공간은 경로·권한을 바꿀 수 없다. */
-    public synchronized Workspace save(Long id, String name, String path, String mode, boolean opsMcp) {
+    public synchronized Workspace save(Long id, String name, String path, String mode, boolean opsMcp, String skillNames) {
         requireEnabled();
         Path real = checkPath(path, Path.of(System.getProperty("user.home", "")));
-        String m = mode == null || mode.isBlank() ? Workspace.FULL : mode.strip().toLowerCase(Locale.ROOT);
+        String m = mode == null || mode.isBlank() ? Workspace.BYPASS : mode.strip().toLowerCase(Locale.ROOT);
         if (!MODES.contains(m)) {
             throw new IllegalArgumentException("권한은 " + MODES + " 중 하나여야 합니다: " + mode);
         }
@@ -238,6 +379,12 @@ public class WorkspaceService {
         w.setPath(real.toString());
         w.setMode(m);
         w.setOpsMcp(opsMcp);
+        // 고른 스킬: 지금 등록돼 있는 이름만 남긴다(지워진 스킬은 조용히 빠진다)
+        Set<String> known = new java.util.HashSet<>();
+        skills.list().forEach(s -> known.add(s.getName()));
+        Workspace picked = new Workspace();
+        picked.setSkills(skillNames);
+        w.setSkills(String.join(",", picked.skillList().stream().filter(known::contains).toList()));
         if (id == null) {
             mapper.insertWorkspace(w);
             log.info("작업 공간 등록 #{} {} ({}, {})", w.getId(), w.getName(), w.getPath(), w.getMode());
@@ -268,6 +415,10 @@ public class WorkspaceService {
         }
         if (!mapper.findActiveIn(id).isEmpty()) {
             throw new IllegalArgumentException("요청을 처리하는 중입니다. 끝난 뒤(또는 중단한 뒤) 지우세요.");
+        }
+        // 대화 기록을 지운다고 안내하므로 활동 로그(요청·도구 상세·답변이 들어 있다)도 함께 지운다
+        for (Long turnId : mapper.turnIds(id)) {
+            events.clear(eventId(turnId));
         }
         mapper.deleteTurns(id);
         mapper.deleteWorkspace(id);
@@ -331,6 +482,7 @@ public class WorkspaceService {
         events.emit(eventId(t.getId()), IssueEvent.STATE, "작업 공간 요청 접수 → NEW", WorkspaceTurn.NEW);
         log.info("작업 공간 요청 #{} ws={} thread={} model={}", t.getId(), workspaceId, t.getThreadId(), t.getModel() == null ? "(기본)" : t.getModel());
         final long id = t.getId();
+        running.add(id);                              // 줄 서 있는 동안에도 "바쁨"으로 센다(재시작이 대기 중인 요청을 실패로 만들지 않게)
         worker.submit(() -> runTurn(id));
         return t;
     }
@@ -350,13 +502,14 @@ public class WorkspaceService {
     // ---------------------------------------------------------------- 실행
 
     private void runTurn(long id) {
-        WorkspaceTurn t = mapper.find(id);
-        if (t == null || !WorkspaceTurn.NEW.equals(t.getState())) {
-            return;
-        }
-        Workspace w = mapper.findWorkspace(t.getWorkspaceId());
-        running.add(id);
+        WorkspaceTurn t = null;
+        Workspace w = null;
         try {
+            t = mapper.find(id);
+            if (t == null || !WorkspaceTurn.NEW.equals(t.getState())) {
+                return;
+            }
+            w = mapper.findWorkspace(t.getWorkspaceId());
             if (w == null) {
                 finish(t, null, WorkspaceTurn.FAILED, null, "작업 공간이 등록 해제되었습니다.");
                 return;
@@ -364,10 +517,39 @@ public class WorkspaceService {
             run(t, w);
         } catch (RuntimeException e) {
             log.warn("작업 공간 요청 #{} 처리 오류: {}", id, e.toString());
-            finish(t, w, WorkspaceTurn.FAILED, null, abbreviate(e.getMessage(), 500));
+            if (t != null) {
+                try {
+                    finish(t, w, WorkspaceTurn.FAILED, null, abbreviate(e.getMessage(), 500));
+                } catch (RuntimeException again) {
+                    log.warn("작업 공간 요청 #{} 실패 기록 오류: {}", id, again.toString());
+                }
+            }
         } finally {
+            // 어떤 경로로 끝났든 진행 중 상태로 남기지 않는다(남으면 그 작업 공간에 새 요청을 못 보낸다)
+            try {
+                WorkspaceTurn now = mapper.find(id);
+                if (now != null && now.isActive()) {
+                    now.setState(WorkspaceTurn.FAILED);
+                    now.setLastError("처리 중 오류로 끝났습니다. 다시 보내 주세요.");
+                    now.setFinishedAt(OffsetDateTime.now());
+                    mapper.update(now);
+                }
+            } catch (RuntimeException e) {
+                log.warn("작업 공간 요청 #{} 마무리 오류: {}", id, e.toString());
+            }
             running.remove(id);
             abortRequested.remove(id);
+            approvals.close(id);                      // 남은 확인 대기는 거부로 닫는다
+            askNotified.remove(id);
+            snapshots.remove(id);                     // finish 를 거치지 않고 끝난 경우에도 스냅샷을 남기지 않는다
+            Path askFile = askFiles.remove(id);
+            if (askFile != null) {
+                try {
+                    Files.deleteIfExists(askFile);
+                } catch (IOException ignore) {
+                    // 임시 파일
+                }
+            }
         }
     }
 
@@ -390,14 +572,38 @@ public class WorkspaceService {
         t.setClaudeSessionId(sid);
         mapper.update(t);
         events.emit(eid, IssueEvent.STATE, "NEW → RUNNING", WorkspaceTurn.RUNNING);
+        Map<String, long[]> before = WorkspaceFiles.snapshot(dir);
+        if (before != null) {
+            snapshots.put(t.getId(), before);
+        }
         long bashMin = Math.max(10, Math.min(50, (props.timeoutOr() - 60_000L) / 60_000L));
         String sys = WorkspacePrompts.system(w, dir, bashMin);
-        List<String> tools = allowTools(w.getMode());
-        CodingAgent.Overrides ov = new CodingAgent.Overrides(t.getModel(), props.effort(), props.timeoutOr(), props.maxTurnsOr(), SOURCE,
-                w.isOpsMcp(), denyTools(w.getMode()));
+        boolean ask = Workspace.ASK.equals(w.getMode());
+        List<String> tools = askFreeTools();          // bypass 에서는 의미 없다(전부 실행). ask 에서는 이 목록만 묻지 않고 허용
+        CodingAgent.Access access;
+        if (ask) {
+            // 이 차례 전용 확인 창구: 토큰이 든 주소의 MCP 서버 설정을 임시 파일로 넘긴다
+            String token = approvals.open(t.getId());
+            String cfg = "{\"mcpServers\":{\"approval\":{\"type\":\"http\",\"url\":\"http://127.0.0.1:" + adminPort + "/mcp/approval/" + token + "\"}}}";
+            try {
+                Path f = Files.createTempFile("dev-agent-approval-", ".json");
+                Files.writeString(f, cfg, StandardCharsets.UTF_8);
+                askFiles.put(t.getId(), f);
+                access = new CodingAgent.Access(CodingAgent.Permission.ASK, w.isOpsMcp(), w.skillList(), f, "mcp__approval__ask");
+            } catch (IOException e) {
+                throw new IllegalStateException("확인 도구 설정 파일을 만들지 못했습니다: " + e.getMessage(), e);
+            }
+        } else {
+            access = new CodingAgent.Access(CodingAgent.Permission.BYPASS, w.isOpsMcp(), w.skillList(), null, null);
+        }
+        CodingAgent.Overrides ov = new CodingAgent.Overrides(t.getModel(), props.effort(), props.timeoutOr(), props.maxTurnsOr(), SOURCE, access);
         CodingAgent.Listener listener = (kind, message, detail) -> events.emit(eid, kind, message, detail);
         events.emit(eid, IssueEvent.CLAUDE, "▶ 작업 공간 「" + w.getName() + "」 세션 " + (resume ? "이어서 " : "") + "시작 (상한 "
                 + props.timeoutOr() / 60_000 + "분/" + props.maxTurnsOr() + "턴)", t.getQuestion());
+        if (abortRequested.contains(t.getId())) {     // 준비(스냅샷 등)하는 사이에 중단을 눌렀다: 세션을 띄우지 않는다
+            finish(t, w, WorkspaceTurn.ABORTED, null, "사용자 중단(시작 전)");
+            return;
+        }
         try {
             CodingAgent.Result r;
             try {
@@ -460,6 +666,12 @@ public class WorkspaceService {
         t.setAnswerMd(answer);
         t.setLastError(error);
         t.setFinishedAt(OffsetDateTime.now());
+        // 이번 차례에 바뀐 파일: 실행 직전 스냅샷과 지금을 비교(셸로 바꾼 것도 잡힌다). 실패·중단이어도 남긴다
+        Map<String, long[]> before = snapshots.remove(t.getId());
+        if (before != null && w != null) {
+            List<String> ch = WorkspaceFiles.changes(before, WorkspaceFiles.snapshot(Path.of(w.getPath())));
+            t.setChanged(ch.isEmpty() ? null : String.join("\n", ch));
+        }
         mapper.update(t);
         long eid = eventId(t.getId());
         if (error != null) {
@@ -483,14 +695,42 @@ public class WorkspaceService {
             return "이미 끝난 요청입니다 (" + t.getState() + ").";
         }
         abortRequested.add(id);
-        boolean killed = agent.kill(t.getClaudeSessionId());
+        approvals.close(id);                          // 확인을 기다리던 실행은 거부로 풀어 준다
+        boolean killed = t.getClaudeSessionId() != null && agent.kill(t.getClaudeSessionId());
         if (killed) {
             events.emit(eventId(id), IssueEvent.INFO, "중단 요청 — 실행 중인 Claude 프로세스 종료");
+        } else {
+            // 세션 프로세스가 막 뜨는 중이면 아직 죽일 것이 없다: 잠깐 동안 다시 시도한다(안 그러면 끝까지 돌고 나서야 중단으로 표시된다)
+            Thread retry = new Thread(() -> {
+                for (int i = 0; i < 15; i++) {
+                    try {
+                        Thread.sleep(1000);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        return;
+                    }
+                    WorkspaceTurn now = mapper.find(id);
+                    if (now == null || !now.isActive()) {
+                        return;
+                    }
+                    if (now.getClaudeSessionId() != null && agent.kill(now.getClaudeSessionId())) {
+                        events.emit(eventId(id), IssueEvent.INFO, "중단 요청 — 실행 중인 Claude 프로세스 종료");
+                        return;
+                    }
+                }
+            }, "workspace-abort-" + id);
+            retry.setDaemon(true);
+            retry.start();
         }
-        return "중단을 요청했습니다." + (killed ? " 그때까지 고친 내용은 폴더에 남습니다." : "");
+        return "중단을 요청했습니다. 그때까지 고친 내용은 폴더에 남습니다.";
     }
 
     // ---------------------------------------------------------------- 조회
+
+    /** 홈 화면용: 모든 작업 공간의 최근 대화. */
+    public List<WorkspaceMapper.ThreadRow> recent(int limit) {
+        return enabled() ? mapper.recentThreads(Math.max(1, Math.min(limit, 50))) : List.of();
+    }
 
     /** 화면의 기본 정보: 작업 공간 목록(실행 중 여부·폴더 존재)과 모델 선택지. 가볍다(프로세스 호출 없음). */
     public Map<String, Object> overview() {
@@ -504,6 +744,7 @@ public class WorkspaceService {
         for (WorkspaceTurn t : mapper.findActive()) {
             active.put(t.getWorkspaceId(), t);
         }
+        Map<Long, Integer> waitingNow = approvals.waitingTurns();
         List<Map<String, Object>> list = new ArrayList<>();
         for (Workspace w : mapper.workspaces()) {
             Map<String, Object> m = new LinkedHashMap<>();
@@ -512,9 +753,11 @@ public class WorkspaceService {
             m.put("path", w.getPath());
             m.put("mode", w.getMode());
             m.put("opsMcp", w.isOpsMcp());
+            m.put("skills", w.skillList());
             m.put("exists", Files.isDirectory(Path.of(w.getPath())));
             WorkspaceTurn a = active.get(w.getId());
             m.put("runningThread", a == null ? null : a.getThreadId());
+            m.put("waiting", a == null ? 0 : waitingNow.getOrDefault(a.getId(), 0));   // 사용자 확인을 기다리는 건수
             list.add(m);
         }
         out.put("workspaces", list);
@@ -522,6 +765,16 @@ public class WorkspaceService {
         SettingService.AgentModels am = settings.getAgentModels();
         out.put("defaultModel", props.model() == null || props.model().isBlank() ? am.devModel() : props.model().strip());
         out.put("mcpAvailable", mcp.agentEnabled());
+        // 고를 수 있는 플랫폼 스킬. auto = 적용 단계가 '작업 공간'이라 모든 작업 공간에 실리는 것
+        List<Map<String, Object>> sk = new ArrayList<>();
+        for (AgentSkill s : skills.list()) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("name", s.getName());
+            m.put("description", s.getDescription());
+            m.put("auto", s.appliesTo(SOURCE));
+            sk.add(m);
+        }
+        out.put("skills", sk);
         out.put("limited", usage.isLimited());
         out.put("limitUntil", usage.isLimited() ? usage.limitUntilText() : null);
         return out;
@@ -548,11 +801,58 @@ public class WorkspaceService {
         out.put("turns", items);
         out.put("liveId", last.getId());
         out.put("events", events.events(eventId(last.getId()), afterEventId, 500));
+        out.put("pending", last.isActive() ? approvals.pending(last.getId()) : List.of());   // 사용자 확인을 기다리는 도구 실행
         CodingAgent.RunInfo ri = last.isActive() ? agent.runInfo(last.getClaudeSessionId()) : null;
         if (ri != null) {
             out.put("running", Map.of("model", ri.model(), "effort", ri.effort(), "startedAt", ri.startedAt()));
         }
         return out;
+    }
+
+    // ---------------------------------------------------------------- 폴더 보기(읽기 전용)
+
+    /** 등록된 작업 공간의 폴더(없으면 IllegalArgumentException). 화면의 파일 패널이 이 루트 안만 본다. */
+    public Path root(long workspaceId) {
+        requireEnabled();
+        Workspace w = mapper.findWorkspace(workspaceId);
+        if (w == null) {
+            throw new IllegalArgumentException("작업 공간을 찾을 수 없습니다: #" + workspaceId);
+        }
+        Path dir = Path.of(w.getPath());
+        if (!Files.isDirectory(dir)) {
+            throw new IllegalArgumentException("폴더가 없습니다: " + w.getPath());
+        }
+        return dir;
+    }
+
+    public Map<String, Object> tree(long workspaceId, String dir) {
+        return WorkspaceFiles.list(root(workspaceId), dir);
+    }
+
+    public Map<String, Object> file(long workspaceId, String path, long ifMtime) {
+        return WorkspaceFiles.read(root(workspaceId), path, ifMtime);
+    }
+
+    public Map<String, Object> diff(long workspaceId, String path) {
+        return WorkspaceFiles.gitDiff(root(workspaceId), path);
+    }
+
+    /** 그림 파일의 실제 경로(그림 형식이 아니거나 너무 크면 IllegalArgumentException). */
+    public Path image(long workspaceId, String path) {
+        Path p = WorkspaceFiles.resolveInside(root(workspaceId), path);
+        try {
+            if (!Files.isRegularFile(p) || WorkspaceFiles.imageType(p.getFileName().toString()) == null
+                    || Files.size(p) > WorkspaceFiles.MAX_IMAGE_BYTES) {
+                throw new IllegalArgumentException("볼 수 있는 그림 파일이 아닙니다: " + path);
+            }
+        } catch (IOException e) {
+            throw new IllegalArgumentException("파일을 읽을 수 없습니다: " + path);
+        }
+        return p;
+    }
+
+    public static String imageType(String name) {
+        return WorkspaceFiles.imageType(name);
     }
 
     static String abbreviate(String s, int max) {

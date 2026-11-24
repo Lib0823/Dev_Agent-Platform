@@ -268,7 +268,7 @@
             <label><input type="checkbox" id="fRes"> 도구 결과</label>
             <label><input type="checkbox" id="fText" checked> 모델 발화</label>
             <span class="sp"></span>
-            <label><input type="checkbox" id="follow" checked> 자동 스크롤</label>
+            <label><input type="checkbox" id="logFollow" checked> 자동 스크롤</label>
           </div>
           <div class="term" id="log"></div>
         </div>
@@ -618,6 +618,7 @@ function renderItems() {
       ans = `<div class="abox"><div class="bar"><span>✦ ${esc(j.model)} / ${esc(j.effort)} · ${j.turns}턴 · ${dur(j.elapsedMs)} · ↑${kfmt(j.inputTokens)} ↓${kfmt(j.outputTokens)}</span><span class="sp"></span>
           ${j.verifyState && VERIFY[j.verifyState] ? `<button class="badge ${VERIFY[j.verifyState][0]}" style="cursor:pointer" title="${VERIFY[j.verifyState][2]} — 눌러서 검증 내역 보기" onclick="toggleVerify(${j.id})">${VERIFY[j.verifyState][1]}</button>` : (j.verify ? '' : '<span class="badge gray" title="이 질문은 2차 검증 없이 작성되었습니다">검증 안 함</span>')}
           ${issueBtn(j, i === thread.items.length - 1)}
+          <button class="btn sm" onclick="toWorkspace(${j.id})" title="이 결과를 작업 공간의 입력칸에 넣습니다 — 작업 공간을 고르고 할 일을 덧붙여 보내면 그 폴더에서 바로 작업합니다">작업 공간으로</button>
           <button class="btn sm" onclick="copyMd(${j.id})" title="마크다운 원문 복사">복사</button><a class="btn sm" href="/api/research/${j.id}/download" title="research-${j.id}.md 내려받기">.md</a></div>
           ${j.verifyMd ? `<div class="vrep md" id="vr-${j.id}" style="display:none"><div class="vh">2차 검증 내역 — 독립 검증자 보고</div>${mdc(j.verifyMd)}</div>` : ''}
           <div class="doc md" id="doc-${j.id}">${mdc(j.resultMd || '')}</div></div>`;
@@ -703,6 +704,16 @@ async function registerIssue() {
   } catch (e) { toast('등록 실패: ' + e, 'err'); }
   b.disabled = false;
 }
+// ---------------------------------------------------------------- 리서치 결과 → 작업 공간(조사한 내용을 근거로 그 폴더에서 바로 작업)
+// 결과 문서를 localStorage 의 넘겨줄 글(ws.draft)에 두고 작업 공간 탭으로 옮긴다. 작업 공간 화면이 입력칸에 넣어 주며, 보내는 것은 사용자가 한다.
+function toWorkspace(id) {
+  const j = thread && thread.items.find(x => x.id === id); if (!j || !j.resultMd) return;
+  const MAX = 18000; let doc = j.resultMd.replace(/\r/g, '');
+  if (doc.length > MAX) doc = doc.slice(0, MAX) + '\n\n…(문서가 길어 여기까지만 붙였습니다 — 전체는 리서치 #' + j.id + ')';
+  const text = '아래는 리서치 #' + j.id + ' 의 조사 결과입니다. 이것을 근거로 다음 일을 해 주세요:\n\n(여기에 할 일을 적으세요)\n\n---\n질문: ' + (j.question || '') + '\n\n' + doc;
+  try { localStorage.setItem('ws.draft', JSON.stringify({ text, from: '리서치 #' + j.id, at: Date.now() })); } catch (e) { toast('넘겨줄 글을 저장하지 못했습니다', 'err'); return; }
+  if (!UI.nav('/workspace.html')) location.href = '/workspace.html';
+}
 function copyMd(id) {
   const j = thread && thread.items.find(x => x.id === id); if (!j) return;
   navigator.clipboard.writeText(j.resultMd || '').then(() => toast('마크다운을 복사했습니다', 'ok'), () => toast('복사 실패', 'err'));
@@ -739,12 +750,12 @@ function renderLog() {
   const box = $('log'); const vis = events.filter(logVisible);
   box.innerHTML = vis.map(logLine).join('') || '<div class="none">아직 활동이 없습니다. 조사가 시작되면 여기에 실시간으로 표시됩니다.</div>';
   $('cntLog').textContent = vis.length;
-  if ($('follow').checked) box.scrollTop = box.scrollHeight;
+  if ($('logFollow').checked) box.scrollTop = box.scrollHeight;
 }
 function appendLog(e) {
   const box = $('log');
   if (box.querySelector('.none')) box.innerHTML = '';
-  if (logVisible(e)) { box.insertAdjacentHTML('beforeend', logLine(e)); if ($('follow').checked) box.scrollTop = box.scrollHeight; }
+  if (logVisible(e)) { box.insertAdjacentHTML('beforeend', logLine(e)); if ($('logFollow').checked) box.scrollTop = box.scrollHeight; }
   $('cntLog').textContent = events.filter(logVisible).length;
 }
 ['fTool', 'fText', 'fRes'].forEach(id => $(id).addEventListener('change', renderLog));
@@ -753,7 +764,7 @@ function appendLog(e) {
 document.querySelectorAll('.tabs .tab').forEach(t => t.addEventListener('click', () => {
   document.querySelectorAll('.tabs .tab').forEach(x => x.classList.remove('sel')); t.classList.add('sel');
   document.querySelectorAll('.pane').forEach(p => p.classList.toggle('sel', p.id === 'p-' + t.dataset.p));
-  if (t.dataset.p === 'log' && $('follow').checked) { const b = $('log'); b.scrollTop = b.scrollHeight; }
+  if (t.dataset.p === 'log' && $('logFollow').checked) { const b = $('log'); b.scrollTop = b.scrollHeight; }
 }));
 
 // ---------------------------------------------------------------- markdown (표·코드·목록·인용)
@@ -815,7 +826,7 @@ function connect() {
       if (!(e.id > 0 && events.some(x => x.id === e.id))) { events.push(e); lastEventId = Math.max(lastEventId, e.id || 0); appendLog(e); }
       if (e.kind === 'STATE' || e.kind === 'ERROR') setTimeout(() => { loadOverview(); loadThread(false); }, 400);
       if (e.kind === 'STATE') toast(`#${e.sessionId - EVENT_BASE} · ${KOR[e.detail] || e.message}`, e.detail === 'FAILED' ? 'err' : (e.detail === 'DONE' ? 'ok' : ''));
-    } else if (e.kind === 'STATE') setTimeout(loadOverview, 400);
+    } else if (e.kind === 'STATE' && e.sessionId < 2 * EVENT_BASE && !UI.asleep()) setTimeout(loadOverview, 400);   // 다른 리서치의 변화만(플랫폼 관리·작업 공간은 20억 이상), 가려진 탭은 쉰다
   });
 }
 

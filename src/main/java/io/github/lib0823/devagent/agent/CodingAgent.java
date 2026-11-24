@@ -47,14 +47,28 @@ public interface CodingAgent {
 
     /**
      * 호출별 재정의: 모델/노력은 비우면 단계 설정값, 상한/턴은 0 이면 단계 기본값, source 는 사용량 기록 구분(null → "agent").
-     * {@code opsMcp} 는 운영 MCP 도구를 실을지(null = 구현체 기본), {@code denyTools} 는 이 호출에서 추가로 금지할 도구
-     * (편집 자동 승인 모드에서는 허용 목록에 없어도 편집이 되므로, 읽기 전용 호출은 여기로 막는다).
+     * {@code access} 는 이 호출의 권한·도구 구성(null = 구현체 기본: 허용 목록 + 편집 자동 승인).
      */
-    record Overrides(String model, String effort, long timeoutMs, int maxTurns, String source, Boolean opsMcp, List<String> denyTools) {
+    record Overrides(String model, String effort, long timeoutMs, int maxTurns, String source, Access access) {
 
         public Overrides(String model, String effort, long timeoutMs, int maxTurns, String source) {
-            this(model, effort, timeoutMs, maxTurns, source, null, null);
+            this(model, effort, timeoutMs, maxTurns, source, null);
         }
+    }
+
+    /** 권한 방식: BYPASS = 묻지 않고 전부 실행, ASK = 허용 목록 밖의 도구(편집·명령)는 실행 전에 사용자 확인({@link Access#askConfig}·{@link Access#askTool}). */
+    enum Permission { BYPASS, ASK }
+
+    /**
+     * 호출별 권한·도구 구성(작업 공간처럼 사용자가 세션마다 정하는 경우).
+     *
+     * @param permission null 이면 구현체 기본(허용 목록 + 편집 자동 승인)
+     * @param opsMcp     운영 MCP 도구를 실을지(null = 구현체 기본)
+     * @param skills     단계와 무관하게 추가로 실을 플랫폼 스킬 이름
+     * @param askConfig  ASK 일 때: 확인 요청을 받는 MCP 서버 설정 파일(호출측이 만든다)
+     * @param askTool    ASK 일 때: 확인 도구 이름(예: mcp__approval__ask)
+     */
+    record Access(Permission permission, Boolean opsMcp, List<String> skills, Path askConfig, String askTool) {
     }
 
     record Result(String text, String sessionId, boolean error, double costUsd, int turns, int toolCalls,

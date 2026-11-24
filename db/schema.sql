@@ -195,8 +195,9 @@ CREATE TABLE IF NOT EXISTS workspace (
     id          BIGSERIAL    PRIMARY KEY,
     name        VARCHAR(80)  NOT NULL,
     path        TEXT         NOT NULL,                   -- 실제 경로(절대)
-    mode        VARCHAR(8)   NOT NULL DEFAULT 'full',    -- 권한: read(읽기만) / edit(파일 편집) / full(편집 + 명령 실행)
-    ops_mcp     BOOLEAN      NOT NULL DEFAULT false,     -- 운영 MCP(읽기 전용 도구)를 세션에 실을지
+    mode        VARCHAR(8)   NOT NULL DEFAULT 'bypass',  -- 권한: bypass(묻지 않고 실행) / ask(파일 수정·명령 실행 전에 화면에서 확인)
+    ops_mcp     BOOLEAN      NOT NULL DEFAULT false,     -- 플랫폼에 등록된 MCP 도구를 세션에 실을지
+    skills      TEXT,                                    -- 이 작업 공간에 실을 플랫폼 스킬 이름(쉼표 구분)
     created_at  TIMESTAMPTZ  NOT NULL DEFAULT now(),
     updated_at  TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
@@ -215,6 +216,7 @@ CREATE TABLE IF NOT EXISTS workspace_turn (
     input_tokens       BIGINT       NOT NULL DEFAULT 0,
     output_tokens      BIGINT       NOT NULL DEFAULT 0,
     elapsed_ms         BIGINT       NOT NULL DEFAULT 0,
+    changed            TEXT,                             -- 이 차례에 바뀐 파일(줄마다 "A|M|D 상대경로", 요청 전후 스냅샷 비교)
     created_at         TIMESTAMPTZ  NOT NULL DEFAULT now(),
     started_at         TIMESTAMPTZ,
     finished_at        TIMESTAMPTZ,

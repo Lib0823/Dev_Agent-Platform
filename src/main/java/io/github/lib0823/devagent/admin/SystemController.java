@@ -160,7 +160,21 @@ public class SystemController {
             return false;
         }
         String self = ":" + req.getServerPort();
-        return !(origin.equals("http://127.0.0.1" + self) || origin.equals("http://localhost" + self));
+        if (origin.equals("http://127.0.0.1" + self) || origin.equals("http://localhost" + self)) {
+            return false;
+        }
+        // 허용된 다른 이름으로 접속한 경우(ADMIN_ALLOWED_HOSTS — 호스트 자체는 WebConfig 가 걸러 낸다): 요청을 받은 주소와 같은 출처면 이 화면이다
+        String host = req.getHeader("Host");
+        return host == null || !(origin.equalsIgnoreCase("http://" + host) || origin.equalsIgnoreCase("https://" + host));
+    }
+
+    /**
+     * 이 서버의 화면(브라우저)이 보낸 요청이 아닌가: Origin 이 없거나 다른 곳이다. {@link #foreign} 과 달리 Origin 없는 요청(curl 등)도 막는다 —
+     * 에이전트 세션이 로컬 API 를 직접 불러서는 안 되는 호출(실행 전 확인의 허용/거부)에 쓴다. 브라우저는 POST 에 항상 Origin 을 붙인다.
+     */
+    static boolean notFromPage(HttpServletRequest req) {
+        String origin = req.getHeader("Origin");
+        return origin == null || origin.isBlank() || foreign(req);
     }
 
     private void exitLater(int code) {

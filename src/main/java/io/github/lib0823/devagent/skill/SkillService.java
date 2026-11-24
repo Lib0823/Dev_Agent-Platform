@@ -139,7 +139,17 @@ public class SkillService {
      * @param stageKey analyze | fix | verify | research | maintain
      */
     public String promptNote(String stageKey) {
-        List<AgentSkill> skills = cache.stream().filter(s -> s.appliesTo(stageKey)).toList();
+        return promptNote(stageKey, null);
+    }
+
+    /**
+     * 단계에 적용되는 스킬 + 이름으로 따로 고른 스킬(작업 공간마다 고른 것 — 단계와 무관하게 싣는다).
+     *
+     * @param extraNames 추가로 실을 스킬 이름(null 이면 단계 것만). 없는 이름은 무시
+     */
+    public String promptNote(String stageKey, java.util.Collection<String> extraNames) {
+        List<AgentSkill> skills = cache.stream()
+                .filter(s -> s.appliesTo(stageKey) || (extraNames != null && extraNames.contains(s.getName()))).toList();
         if (skills.isEmpty()) {
             return "";
         }

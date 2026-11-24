@@ -27,6 +27,7 @@ public class WorkspaceTurn {
     private long inputTokens;
     private long outputTokens;
     private long elapsedMs;
+    private String changed;           // 이 차례에 바뀐 파일(줄마다 "A|M|D 상대경로"). 파일이 너무 많은 폴더는 비어 있다
     private OffsetDateTime createdAt;
     private OffsetDateTime startedAt;
     private OffsetDateTime finishedAt;
@@ -62,6 +63,8 @@ public class WorkspaceTurn {
     public void setOutputTokens(long outputTokens) { this.outputTokens = outputTokens; }
     public long getElapsedMs() { return elapsedMs; }
     public void setElapsedMs(long elapsedMs) { this.elapsedMs = elapsedMs; }
+    public String getChanged() { return changed; }
+    public void setChanged(String changed) { this.changed = changed; }
     public OffsetDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(OffsetDateTime createdAt) { this.createdAt = createdAt; }
     public OffsetDateTime getStartedAt() { return startedAt; }

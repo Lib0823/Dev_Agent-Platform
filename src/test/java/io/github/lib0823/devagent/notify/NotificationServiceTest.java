@@ -41,4 +41,13 @@ class NotificationServiceTest {
         assertNull(NotificationService.issue("[이슈] (계속 2/3)\n나머지"));
         assertNull(NotificationService.issue("  "));
     }
+
+    @Test
+    void issueNoticeLinksToItsSessionWhenTheTextNamesAnIssue() {
+        // 안내문에 group/repo#번호 가 있으면 그 세션으로(에이전트 화면이 #ref= 를 푼다), 없으면 대시보드
+        assertEquals("/agent.html#ref=grp%2Fsub%2Frepo%2312", NotificationService.issueLink("설계안 grp/sub/repo#12 — 로그인 오류\n본문"));
+        assertEquals("/agent.html#ref=g%2Fr%237", NotificationService.issueLink("분석 시작: g/r#7 — 제목"));
+        assertEquals("/agent.html", NotificationService.issueLink("진행 중인 이슈: 없음"));
+        assertEquals("/agent.html", NotificationService.issueLink(null));
+    }
 }

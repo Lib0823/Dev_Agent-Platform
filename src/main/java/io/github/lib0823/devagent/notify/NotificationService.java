@@ -105,7 +105,15 @@ public class NotificationService {
         if (title.isEmpty() || title.startsWith("(관리 페이지 답변)") || title.startsWith("(계속 ")) {
             return null;
         }
-        return new Notification("issue", issueLevel(title), title, nl < 0 ? null : rest.substring(nl + 1), "/agent.html");
+        return new Notification("issue", issueLevel(title), title, nl < 0 ? null : rest.substring(nl + 1), issueLink(rest));
+    }
+
+    private static final java.util.regex.Pattern ISSUE_REF = java.util.regex.Pattern.compile("([\\w.-]+(?:/[\\w.-]+)+#\\d+)");
+
+    /** 안내문에 이슈 참조(group/repo#12)가 있으면 그 세션으로 바로 가는 주소(에이전트 화면이 #ref= 를 세션으로 푼다), 없으면 대시보드. */
+    static String issueLink(String text) {
+        java.util.regex.Matcher m = ISSUE_REF.matcher(text == null ? "" : text);
+        return m.find() ? "/agent.html#ref=" + java.net.URLEncoder.encode(m.group(1), java.nio.charset.StandardCharsets.UTF_8) : "/agent.html";
     }
 
     static String issueLevel(String title) {

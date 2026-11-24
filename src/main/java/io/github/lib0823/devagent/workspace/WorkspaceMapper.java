@@ -21,8 +21,9 @@ public interface WorkspaceMapper {
                 id          BIGSERIAL    PRIMARY KEY,
                 name        VARCHAR(80)  NOT NULL,
                 path        TEXT         NOT NULL,
-                mode        VARCHAR(8)   NOT NULL DEFAULT 'full',
+                mode        VARCHAR(8)   NOT NULL DEFAULT 'bypass',
                 ops_mcp     BOOLEAN      NOT NULL DEFAULT false,
+                skills      TEXT,
                 created_at  TIMESTAMPTZ  NOT NULL DEFAULT now(),
                 updated_at  TIMESTAMPTZ  NOT NULL DEFAULT now()
             )
@@ -44,6 +45,7 @@ public interface WorkspaceMapper {
                 input_tokens       BIGINT       NOT NULL DEFAULT 0,
                 output_tokens      BIGINT       NOT NULL DEFAULT 0,
                 elapsed_ms         BIGINT       NOT NULL DEFAULT 0,
+                changed            TEXT,
                 created_at         TIMESTAMPTZ  NOT NULL DEFAULT now(),
                 started_at         TIMESTAMPTZ,
                 finished_at        TIMESTAMPTZ,
@@ -55,13 +57,25 @@ public interface WorkspaceMapper {
     @Update("CREATE INDEX IF NOT EXISTS idx_workspace_turn_thread ON workspace_turn (workspace_id, thread_id, id)")
     void ensureIndex();
 
+    /** 1.16.0: 작업 공간마다 고른 스킬. */
+    @Update("ALTER TABLE workspace ADD COLUMN IF NOT EXISTS skills TEXT")
+    void ensureSkillsColumn();
+
+    /** 1.16.0: 권한이 read/edit/full 세 단계에서 ask/bypass 둘로 바뀌었다 — full 은 bypass, 나머지는 ask 로 옮긴다(멱등). */
+    @Update("UPDATE workspace SET mode = CASE WHEN mode = 'full' THEN 'bypass' ELSE 'ask' END WHERE mode NOT IN ('bypass', 'ask')")
+    int migrateModes();
+
+    /** 1.15.0: 이 차례에 바뀐 파일 목록. */
+    @Update("ALTER TABLE workspace_turn ADD COLUMN IF NOT EXISTS changed TEXT")
+    void ensureChangedColumn();
+
     // ---------------------------------------------------------------- 작업 공간
 
-    @Insert("INSERT INTO workspace (name, path, mode, ops_mcp) VALUES (#{name}, #{path}, #{mode}, #{opsMcp})")
+    @Insert("INSERT INTO workspace (name, path, mode, ops_mcp, skills) VALUES (#{name}, #{path}, #{mode}, #{opsMcp}, #{skills})")
     @Options(useGeneratedKeys = true, keyProperty = "id", keyColumn = "id")
     int insertWorkspace(Workspace w);
 
-    @Update("UPDATE workspace SET name = #{name}, path = #{path}, mode = #{mode}, ops_mcp = #{opsMcp}, updated_at = now() WHERE id = #{id}")
+    @Update("UPDATE workspace SET name = #{name}, path = #{path}, mode = #{mode}, ops_mcp = #{opsMcp}, skills = #{skills}, updated_at = now() WHERE id = #{id}")
     int updateWorkspace(Workspace w);
 
     @Select("SELECT * FROM workspace WHERE id = #{id}")
@@ -72,6 +86,9 @@ public interface WorkspaceMapper {
 
     @Delete("DELETE FROM workspace WHERE id = #{id}")
     int deleteWorkspace(@Param("id") long id);
+
+    @Select("SELECT id FROM workspace_turn WHERE workspace_id = #{id}")
+    List<Long> turnIds(@Param("id") long id);
 
     @Delete("DELETE FROM workspace_turn WHERE workspace_id = #{id}")
     int deleteTurns(@Param("id") long id);
@@ -92,7 +109,7 @@ public interface WorkspaceMapper {
     @Update("""
             UPDATE workspace_turn SET state = #{state}, answer_md = #{answerMd}, claude_session_id = #{claudeSessionId},
                 last_error = #{lastError}, turns = #{turns}, input_tokens = #{inputTokens}, output_tokens = #{outputTokens},
-                elapsed_ms = #{elapsedMs}, started_at = #{startedAt}, finished_at = #{finishedAt}, updated_at = now()
+                elapsed_ms = #{elapsedMs}, changed = #{changed}, started_at = #{startedAt}, finished_at = #{finishedAt}, updated_at = now()
             WHERE id = #{id}
             """)
     int update(WorkspaceTurn t);
@@ -127,7 +144,23 @@ public interface WorkspaceMapper {
             """)
     List<ThreadRow> threads(@Param("workspaceId") long workspaceId, @Param("limit") int limit);
 
+    /** 모든 작업 공간의 최근 대화(홈 화면 요약용). */
+    @Select("""
+            SELECT t.thread_id AS id, t.workspace_id AS workspace_id, w.name AS workspace, COUNT(*) AS turns, MAX(t.updated_at) AS updated_at,
+                   (SELECT f.question FROM workspace_turn f WHERE f.id = t.thread_id) AS title,
+                   (SELECT l.state FROM workspace_turn l WHERE l.thread_id = t.thread_id ORDER BY l.id DESC LIMIT 1) AS state
+            FROM workspace_turn t JOIN workspace w ON w.id = t.workspace_id
+            GROUP BY t.thread_id, t.workspace_id, w.name ORDER BY MAX(t.id) DESC LIMIT #{limit}
+            """)
+    List<ThreadRow> recentThreads(@Param("limit") int limit);
+
     class ThreadRow {
+        private long workspaceId;
+        private String workspace;
+        public long getWorkspaceId() { return workspaceId; }
+        public void setWorkspaceId(long workspaceId) { this.workspaceId = workspaceId; }
+        public String getWorkspace() { return workspace; }
+        public void setWorkspace(String workspace) { this.workspace = workspace; }
         private long id;
         private int turns;
         private String title;

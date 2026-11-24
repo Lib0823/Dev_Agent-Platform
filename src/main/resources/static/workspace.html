@@ -12,7 +12,12 @@
   /* ---------- layout: 왼쪽 작업 공간·대화 목록, 오른쪽 대화(화면 높이에 맞춰 안에서만 스크롤) ---------- */
   .body { display: grid; grid-template-columns: var(--side-w, 320px) minmax(0, 1fr); gap: 18px; padding: 18px 22px 48px; flex: 1; }
   .wside { padding: 14px; position: sticky; top: 78px; height: calc(100vh - 96px); display: flex; flex-direction: column; gap: 12px; }
-  .wmain { position: sticky; top: 78px; height: calc(100vh - 96px); display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+  .wmain { position: sticky; top: 78px; height: calc(100vh - 96px); display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); min-width: 0; overflow: hidden; }
+  .wmain.files { grid-template-columns: minmax(360px, 1fr) minmax(0, 1.4fr); }
+  .wcol { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
+  .wfiles { display: none; flex-direction: column; min-width: 0; min-height: 0; border-left: 1px solid var(--line); }
+  .wmain.files .wfiles { display: flex; }
+  @media (max-width: 1300px) { .wmain.files { grid-template-columns: minmax(0, 1fr); } .wmain.files .wcol { display: none; } .wfiles { border-left: 0; } }
   @media (max-width: 980px) { .body { grid-template-columns: 1fr; } .wside { position: static; height: auto; max-height: 46vh; } .wmain { position: static; height: 78vh; } }
 
   /* ---------- sidebar ---------- */
@@ -59,6 +64,8 @@
   .wa .md th { background: var(--raised); font-weight: 600; }
   .wa .werr { color: var(--err); font-size: 12.5px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; }
   .wa .wmeta { font-size: 11.5px; color: var(--muted); margin-top: 8px; display: flex; align-items: center; gap: 6px; }
+  .wa .wmeta .btn.ghost { height: 24px; padding: 0 8px; font-size: 11.5px; background: transparent; border-color: transparent; color: var(--muted); box-shadow: none; }
+  .wa .wmeta .btn.ghost:hover { color: var(--text); border-color: var(--line2); background: var(--surface); }
   .wa.live { border-color: color-mix(in srgb, var(--run) 35%, transparent); background: var(--runbg); }
   .wa .wlh { display: flex; align-items: center; gap: 8px; font-size: 13px; }
   .wa .wlh .mm { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
@@ -82,6 +89,60 @@
   .winput .btn { height: 56px; width: 54px; justify-content: center; padding: 0; flex: none; }
   .wwarn { flex: none; margin: 10px 16px 0; }
 
+  /* ---------- 답변 아래: 이 차례에 바뀐 파일 ---------- */
+  .wchg { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; margin-top: 10px; padding-top: 9px; border-top: 1px dashed var(--line2); font-size: 12px; color: var(--muted); }
+  .wchg .cf { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 9px; border-radius: 7px; border: 1px solid var(--line); background: var(--surface); color: var(--text2); font-family: var(--mono); font-size: 11.5px; cursor: pointer; max-width: 320px; }
+  .wchg .cf span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .wchg .cf:hover { border-color: var(--accent); color: var(--text); }
+  .wchg .cf b { font-weight: 700; } .wchg .cf.A b { color: var(--ok); } .wchg .cf.M b { color: var(--warn); } .wchg .cf.D b { color: var(--err); }
+  .wchg .cf.D { cursor: default; text-decoration: line-through; opacity: .7; } .wchg .cf.D:hover { border-color: var(--line); color: var(--text2); }
+
+  /* ---------- 파일 패널: 폴더 트리 | 파일 보기(원문·미리보기·변경분) ---------- */
+  .fbar { flex: none; display: flex; align-items: center; gap: 8px; padding: 0 12px; height: 57px; border-bottom: 1px solid var(--line); min-width: 0; }
+  .fbar .fp { flex: 1; min-width: 0; font-family: var(--mono); font-size: 12px; color: var(--text2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fbar .fp b { color: var(--text); font-weight: 600; }
+  .fbar .seg { flex-wrap: nowrap; flex: none; } .fbar .seg .tab { height: 28px; padding: 0 10px; font-size: 12.5px; }
+  .fbar .icon-btn { width: 30px; height: 30px; flex: none; }
+  .fbody { flex: 1; min-height: 0; display: grid; grid-template-columns: 230px minmax(0, 1fr); }
+  .wfiles.notree .fbody { grid-template-columns: minmax(0, 1fr); } .wfiles.notree .ftree { display: none; }
+  .ftree { overflow: auto; border-right: 1px solid var(--line); padding: 8px 6px; font-size: 12.5px; overscroll-behavior: contain; }
+  .fr { display: flex; align-items: center; gap: 5px; height: 25px; padding-right: 6px; border-radius: 6px; cursor: pointer; white-space: nowrap; color: var(--text2); }
+  .fr:hover { background: var(--surface2); color: var(--text); }
+  .fr.sel { background: var(--surface2); color: var(--text); font-weight: 600; box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent) inset; }
+  .fr .cv { width: 12px; flex: none; color: var(--muted); font-size: 10px; text-align: center; }
+  .fr .nm { overflow: hidden; text-overflow: ellipsis; }
+  .fr.d .nm { color: var(--text); font-weight: 600; }
+  .fr .chd { width: 6px; height: 6px; border-radius: 50%; background: var(--warn); flex: none; margin-left: auto; } .fr .chd.A { background: var(--ok); }
+  .ftree .fnote { color: var(--muted); font-size: 12px; padding: 6px 8px; }
+  .fview { overflow: auto; min-width: 0; overscroll-behavior: contain; }
+  .fempty { height: 100%; display: grid; place-items: center; text-align: center; color: var(--muted); font-size: 13px; line-height: 1.7; padding: 20px; }
+  .fsrc { display: flex; font-family: var(--mono); font-size: 12.5px; line-height: 1.6; min-width: max-content; }
+  .fsrc pre { margin: 0; padding: 12px 0; font: inherit; background: none; border: 0; }
+  .fsrc .ln { flex: none; text-align: right; padding-left: 12px; padding-right: 10px; color: var(--muted); opacity: .6; user-select: none; border-right: 1px solid var(--line); position: sticky; left: 0; background: var(--surface); }
+  .fsrc .cd { padding-left: 12px; padding-right: 16px; white-space: pre; color: var(--text); }
+  .fimg { padding: 16px; text-align: center; } .fimg img { max-width: 100%; border-radius: 8px; border: 1px solid var(--line); background: #fff; }
+  .fdiff { font-family: var(--mono); font-size: 12.5px; line-height: 1.6; min-width: max-content; padding: 8px 0; }
+  .fdiff div { white-space: pre; padding: 0 14px; }
+  .fdiff .a { background: color-mix(in srgb, var(--ok) 13%, transparent); color: var(--ok); }
+  .fdiff .d { background: color-mix(in srgb, var(--err) 13%, transparent); color: var(--err); }
+  .fdiff .h { background: color-mix(in srgb, var(--info) 10%, transparent); color: var(--info); margin-top: 6px; }
+  .fdiff .m { color: var(--muted); }
+  /* 문서 미리보기(마크다운) */
+  .doc { max-width: 860px; margin: 0 auto; padding: 22px 28px 60px; font-size: 14.5px; line-height: 1.8; word-break: break-word; }
+  .doc h1 { font-size: 24px; margin: 6px 0 14px; letter-spacing: -.02em; line-height: 1.3; }
+  .doc h2 { font-size: 19px; margin: 30px 0 10px; padding-bottom: 6px; border-bottom: 1px solid var(--line); letter-spacing: -.01em; }
+  .doc h3 { font-size: 16px; margin: 24px 0 8px; } .doc h4, .doc h5, .doc h6 { font-size: 14.5px; margin: 20px 0 6px; color: var(--text2); }
+  .doc p { margin: 10px 0; } .doc ul, .doc ol { margin: 8px 0; padding-left: 24px; } .doc li { margin: 3px 0; } .doc li > ul, .doc li > ol { margin: 2px 0; }
+  .doc code { font-family: var(--mono); font-size: 12.5px; background: var(--surface2); border: 1px solid var(--line); padding: 1px 5px; border-radius: 5px; }
+  .doc pre { font-family: var(--mono); font-size: 12.5px; line-height: 1.6; background: var(--term); color: var(--term-text); padding: 12px 14px; border-radius: 10px; overflow: auto; border: 1px solid var(--line); margin: 12px 0; }
+  .doc pre code { background: none; border: 0; padding: 0; color: inherit; }
+  .doc pre.math { background: var(--surface2); color: var(--text); }
+  .doc blockquote { margin: 12px 0; padding: 2px 14px; border-left: 3px solid var(--line2); color: var(--text2); }
+  .doc table { border-collapse: collapse; font-size: 13.5px; margin: 12px 0; display: block; overflow-x: auto; max-width: 100%; }
+  .doc th, .doc td { border: 1px solid var(--line2); padding: 5px 10px; text-align: left; vertical-align: top; } .doc th { background: var(--surface2); font-weight: 600; }
+  .doc img { max-width: 100%; border-radius: 6px; } .doc hr { border: 0; border-top: 1px solid var(--line); margin: 22px 0; }
+  .doc a { color: var(--accent); }
+
   /* ---------- 등록·설정 창 ---------- */
   dialog.wdlg { width: min(600px, calc(100vw - 32px)); padding: 20px; border-radius: 16px; border: 1px solid var(--line); background: var(--surface); color: var(--text); }
   dialog.wdlg::backdrop { background: rgba(0,0,0,.45); }
@@ -89,7 +150,47 @@
   dialog.wdlg .sub { color: var(--muted); font-size: 12.5px; line-height: 1.6; margin: 0 0 10px; }
   dialog.wdlg label.l { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin: 14px 0 6px; }
   dialog.wdlg input.mono { font-family: var(--mono); font-size: 12.5px; }
-  .wmodes { display: flex; flex-direction: column; gap: 6px; }
+  dialog.wdlg { width: min(680px, calc(100vw - 32px)); max-height: calc(100vh - 40px); overflow: auto; }
+  .prow { display: flex; gap: 8px; } .prow .btn { flex: none; height: 38px; }
+  /* 폴더 찾아보기: 바로 가기 · 지금 위치(조각마다 누르면 그리로) · 하위 폴더 · 선택 */
+  .brw { margin-top: 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface2); overflow: hidden; }
+  .bsc { display: flex; flex-wrap: wrap; gap: 5px; padding: 9px 10px 0; }
+  .bsc .chip { cursor: pointer; height: 25px; font-size: 12px; font-weight: 500; } .bsc .chip:hover { border-color: var(--accent); color: var(--text); }
+  .bcr { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; padding: 8px 10px; font-size: 12.5px; border-bottom: 1px solid var(--line); }
+  .bcr a { color: var(--text2); padding: 2px 6px; border-radius: 6px; cursor: pointer; text-decoration: none !important; font-family: var(--mono); font-size: 12px; }
+  .bcr a:hover { background: var(--raised); color: var(--text); } .bcr a:last-child { color: var(--text); font-weight: 700; }
+  .bcr i { color: var(--muted); font-style: normal; font-size: 11px; }
+  .bls { height: 220px; overflow: auto; padding: 6px; overscroll-behavior: contain; }
+  .bls .bd { display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 9px; border-radius: 8px; cursor: pointer; font-size: 13px; }
+  .bls .bd:hover { background: var(--raised); }
+  .bls .bd svg { color: var(--muted); flex: none; width: 15px; height: 15px; }
+  .bls .bd span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bls .bd.up { color: var(--muted); }
+  .bls .bnone { color: var(--muted); font-size: 12.5px; padding: 14px 10px; }
+  .bft { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-top: 1px solid var(--line); background: var(--surface); }
+  .bft .bi { flex: 1; min-width: 0; font-size: 12px; color: var(--muted); display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .bft .bi.no { color: var(--warn); }
+  .wskills { display: flex; flex-wrap: wrap; gap: 6px; }
+  .wskills .sk { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 11px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface2); color: var(--text2); font-size: 12.5px; cursor: pointer; user-select: none; }
+  .wskills .sk:hover { border-color: var(--line2); color: var(--text); }
+  .wskills .sk.on { border-color: color-mix(in srgb, var(--accent) 60%, transparent); background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--text); font-weight: 600; }
+  .wskills .sk.auto { cursor: default; opacity: .85; } .wskills .sk small { color: var(--muted); font-weight: 400; }
+  .wskills .none { color: var(--muted); font-size: 12.5px; }
+  .wmodes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  @media (max-width: 560px) { .wmodes { grid-template-columns: 1fr; } }
+
+  /* ---------- 실행 전 확인(「확인 후 실행」): 입력칸 위에 뜬다 ---------- */
+  .wasks { flex: none; max-height: 46%; overflow: auto; padding: 0 16px; display: flex; flex-direction: column; gap: 8px; }
+  .wasks:empty { display: none; }
+  .wask { border: 1px solid color-mix(in srgb, var(--warn) 45%, var(--line)); background: var(--warnbg); border-radius: 12px; padding: 10px 12px; margin-top: 10px; }
+  .wask .ah { display: flex; align-items: center; gap: 8px; font-size: 13px; min-width: 0; }
+  .wask .ah b { color: var(--warn); flex: none; }
+  .wask .ah code { font-family: var(--mono); font-size: 12px; background: var(--surface); border: 1px solid var(--line); padding: 1px 7px; border-radius: 6px; flex: none; }
+  .wask .ah span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono); font-size: 12px; color: var(--text); }
+  .wask pre { margin: 8px 0; padding: 8px 10px; max-height: 180px; overflow: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; font-family: var(--mono); font-size: 12px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; color: var(--text); }
+  .wask .ab { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .wask .ab input.in { flex: 1; min-width: 160px; height: 30px; font-size: 12.5px; }
+  .wsp .wdot.ask { background: var(--warn); }
   .wmodes label { display: flex; gap: 10px; align-items: flex-start; padding: 9px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface2); cursor: pointer; }
   .wmodes label:has(input:checked) { border-color: color-mix(in srgb, var(--accent) 60%, transparent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent) inset; }
   .wmodes input { accent-color: var(--accent); margin-top: 3px; }
@@ -114,41 +215,84 @@
     </aside>
 
     <main class="panel-card wmain" id="main">
-      <div class="whead" id="whead" style="display:none">
-        <div class="wt"><b id="hName"></b><span id="hPath"></span></div>
-        <span class="badge" id="hMode"></span>
-        <select class="in" id="wModel" title="이 요청에 쓸 모델"></select>
+      <div class="wcol">
+        <div class="whead" id="whead" style="display:none">
+          <div class="wt"><b id="hName"></b><span id="hPath"></span></div>
+          <span class="badge" id="hMode"></span>
+          <select class="in" id="wModel" title="이 요청에 쓸 모델"></select>
+          <button class="icon-btn" id="btnFiles" onclick="toggleFiles()" title="파일 패널 열기/닫기 (Alt+P)"></button>
+        </div>
+        <div class="callout warn wwarn" id="wWarn" style="display:none"></div>
+        <div class="wchat" id="wchat"></div>
+        <div class="wasks" id="wasks"></div>
+        <div class="winput" id="winput" style="display:none">
+          <textarea class="in" id="wIn" rows="2" placeholder="이 폴더에서 할 일을 적으세요. 예) 3장 실험 결과 표를 최신 로그로 다시 채워 줘   (Enter 전송 · Shift+Enter 줄바꿈)"></textarea>
+          <button class="btn primary" id="wSend" onclick="send()" title="보내기 (Enter)"></button>
+        </div>
       </div>
-      <div class="callout warn wwarn" id="wWarn" style="display:none"></div>
-      <div class="wchat" id="wchat"></div>
-      <div class="winput" id="winput" style="display:none">
-        <textarea class="in" id="wIn" rows="2" placeholder="이 폴더에서 할 일을 적으세요. 예) 3장 실험 결과 표를 최신 로그로 다시 채워 줘   (Enter 전송 · Shift+Enter 줄바꿈)"></textarea>
-        <button class="btn primary" id="wSend" onclick="send()" title="보내기 (Enter)"></button>
-      </div>
+      <aside class="wfiles" id="wfiles">
+        <div class="fbar">
+          <button class="icon-btn" id="fTreeBtn" onclick="toggleTree()" title="폴더 트리 접기/펴기"></button>
+          <div class="fp" id="fPath"></div>
+          <div class="seg" id="fModes"></div>
+          <button class="icon-btn" id="fReload" onclick="reloadFiles()" title="새로 읽기"></button>
+          <button class="icon-btn" id="fClose" onclick="toggleFiles(false)" title="파일 패널 닫기"></button>
+        </div>
+        <div class="fbody">
+          <div class="ftree" id="ftree"></div>
+          <div class="fview" id="fview"></div>
+        </div>
+      </aside>
     </main>
   </div>
 </div>
 
 <dialog class="wdlg" id="wDlg">
   <h3 id="dTitle">작업 공간 추가</h3>
-  <p class="sub">이 PC 의 폴더를 등록하면, 그 폴더를 작업 디렉터리로 한 Claude 세션과 대화하며 일할 수 있습니다. 코드 저장소가 아니어도 됩니다(논문·문서·실험 폴더).</p>
-  <label class="l" for="dPath">폴더 경로</label>
-  <input class="in mono" id="dPath" autocomplete="off" spellcheck="false" placeholder="예) C:\Users\me\papers\my-paper   또는   /home/me/projects/app">
+  <p class="sub">이 PC 의 폴더를 고르면, 그 폴더를 작업 디렉터리로 한 Claude 세션과 대화하며 일할 수 있습니다. 코드 저장소가 아니어도 됩니다(논문·문서·실험 폴더).</p>
+  <label class="l" for="dPath">폴더</label>
+  <div class="prow">
+    <input class="in mono" id="dPath" autocomplete="off" spellcheck="false" placeholder="아래에서 고르거나 경로를 붙여 넣으세요">
+    <button class="btn" id="dBrowseBtn" onclick="toggleBrowse()" title="폴더 찾아보기 열기/닫기"></button>
+  </div>
+  <div class="brw" id="dBrw" style="display:none">
+    <div class="bsc" id="bShort"></div>
+    <div class="bcr" id="bCrumbs"></div>
+    <div class="bls" id="bList"></div>
+    <div class="bft"><span class="bi" id="bInfo"></span><button class="btn sm primary" id="bPick" onclick="pickDir()">이 폴더 선택</button></div>
+  </div>
   <label class="l" for="dName">이름 <span style="font-weight:400">(비우면 폴더 이름)</span></label>
   <input class="in" id="dName" maxlength="80" autocomplete="off">
-  <label class="l">권한 — 세션이 이 폴더에서 할 수 있는 일</label>
+  <label class="l">실행 방식</label>
   <div class="wmodes">
-    <label><input type="radio" name="dMode" value="full"><div><b>편집 + 실행</b><span>파일을 고치고 명령(빌드·테스트·스크립트·실험·git)을 돌립니다. 건별 승인 없이 진행되니 믿을 수 있는 폴더에만.</span></div></label>
-    <label><input type="radio" name="dMode" value="edit"><div><b>편집만</b><span>파일은 고치지만 명령은 실행하지 않습니다. 문서·논문 작업에 알맞습니다.</span></div></label>
-    <label><input type="radio" name="dMode" value="read"><div><b>읽기만</b><span>읽고 찾아서 답하기만 합니다. 아무것도 바꾸지 않습니다.</span></div></label>
+    <label><input type="radio" name="dMode" value="bypass"><div><b>바로 실행</b><span>확인 없이 파일을 고치고 명령을 돌립니다. 대화가 끊기지 않습니다.</span></div></label>
+    <label><input type="radio" name="dMode" value="ask"><div><b>확인 후 실행</b><span>파일 수정·명령 실행 전에 화면에서 허용/거부를 묻습니다(읽기·검색은 묻지 않음).</span></div></label>
   </div>
-  <label class="chk" id="dMcpRow"><input type="checkbox" id="dMcp"> <span>운영 MCP 도구 사용 — 플랫폼 탭에 등록된 운영 데이터 조회 도구(읽기 전용)를 이 작업 공간의 세션에도 싣습니다. 서버·인프라 작업용.</span></label>
+  <label class="l">스킬 <span style="font-weight:400">— 이 작업 공간의 세션에 실을 작업 지침(플랫폼 탭에서 등록·수정)</span></label>
+  <div class="wskills" id="dSkills"></div>
+  <label class="chk" id="dMcpRow"><input type="checkbox" id="dMcp"> <span>MCP 도구 사용 — 플랫폼 탭에 등록된 MCP 서버(운영 데이터 조회 등)의 도구를 이 작업 공간의 세션에도 싣습니다. 서버·인프라 작업용.</span></label>
   <div class="derr" id="dErr"></div>
   <div class="btns">
     <button class="btn danger" id="dDel" onclick="removeWs()" title="등록만 해제합니다 — 폴더와 파일은 그대로 둡니다">등록 해제</button>
     <span class="sp"></span>
     <button class="btn" onclick="$('wDlg').close()">취소</button>
     <button class="btn primary" id="dSave" onclick="saveWs()">저장</button>
+  </div>
+</dialog>
+<dialog class="wdlg" id="riDlg">
+  <h3>이슈로 등록</h3>
+  <p class="sub">이 답변을 GitLab 이슈로 올립니다. 「바로 시작」을 켜 두면 이슈 에이전트가 분석부터 시작하고, 진행은 에이전트 탭에서 봅니다.</p>
+  <label class="l" for="riProj">프로젝트</label>
+  <select class="in" id="riProj"></select>
+  <label class="l" for="riTitle">제목</label>
+  <input class="in" id="riTitle" maxlength="255" autocomplete="off">
+  <label class="l" for="riBody">내용 (마크다운 — 등록 전에 고칠 수 있습니다)</label>
+  <textarea class="in" id="riBody" style="min-height:220px"></textarea>
+  <label class="chk"><input type="checkbox" id="riStart" checked> <span>등록 후 에이전트가 바로 시작</span></label>
+  <div class="btns">
+    <span class="sp"></span>
+    <button class="btn" onclick="$('riDlg').close()">취소</button>
+    <button class="btn primary" id="riGo" onclick="registerIssue()">등록</button>
   </div>
 </dialog>
 <div class="toasts" id="toasts"></div>
@@ -162,14 +306,14 @@ UI.pollAgentChip();
 $('btnAdd').innerHTML = I.plus + '작업 공간 추가';
 $('wSend').innerHTML = I.send;
 
-const MODE_KO = { full: '편집 + 실행', edit: '편집만', read: '읽기만' };
-const MODE_CLS = { full: 'run', edit: 'info', read: 'gray' };
+const MODE_KO = { bypass: '바로 실행', ask: '확인 후 실행' };
+const MODE_CLS = { bypass: 'run', ask: 'info' };
 const STATE_KO = { DONE: '완료', FAILED: '실패', ABORTED: '중단됨' };
 const HINTS = ['이 폴더가 어떤 구조인지 훑어보고 요약해 줘', '최근에 바뀐 내용을 정리해 줘', 'README 를 읽고 실행 방법을 알려 줘'];
 const GEAR = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h0a1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v0a1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>';
 
 // 상태: 고른 작업 공간(sel)·대화(thread, null = 새 대화)와 그 대화의 차례·활동 로그
-const st = { info: null, list: [], sel: null, threads: [], thread: null, turns: [], events: [], lastEv: 0, liveId: 0, running: null, sending: false, editId: null };
+const st = { info: null, list: [], sel: null, threads: [], thread: null, turns: [], events: [], lastEv: 0, liveId: 0, running: null, sending: false, editId: null, pending: [], asked: new Set(), decided: new Set() };
 const getJ = async u => (await fetch(u, { cache: 'no-store' })).json();
 const postJ = async (u, body) => (await fetch(u, { method: 'POST', body: new URLSearchParams(body || {}) })).json();
 const ls = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (_) {} return null; };
@@ -201,7 +345,7 @@ function renderList() {
   UI.set($('wlist'), st.list.map(w => {
     const sel = w.id === st.sel;
     let h = `<div class="wsp${sel ? ' sel' : ''}${w.exists ? '' : ' gone'}"><div class="wh" onclick="selectWs(${w.id})" title="${esc(w.path)}${w.exists ? '' : '\n폴더가 없습니다'}">
-      <div class="wn"><b>${esc(w.name)}</b><span>&lrm;${esc(w.path)}</span></div>${w.runningThread ? '<span class="wdot" title="작업 중"></span>' : ''}
+      <div class="wn"><b>${esc(w.name)}</b><span>&lrm;${esc(w.path)}</span></div>${w.waiting ? '<span class="wdot ask" title="확인을 기다리는 중"></span>' : w.runningThread ? '<span class="wdot" title="작업 중"></span>' : ''}
       <button class="wgear" onclick="event.stopPropagation();openDlg(${w.id})" title="설정">${GEAR}</button></div>`;
     if (sel) {
       h += `<div class="wths"><div class="wth new${st.thread == null ? ' sel' : ''}" onclick="selectThread(null)">${I.plus}<span class="tt">새 대화</span></div>`
@@ -221,7 +365,7 @@ async function loadThreads() {
 }
 /** 작업 공간 선택. threadId 를 주지 않으면 실행 중인 대화 → 마지막으로 보던 대화 → 가장 최근 대화 순으로 연다. */
 async function selectWs(id, threadId) {
-  if (st.sel !== id) { st.sel = id; st.threads = []; st.thread = null; resetThread(); }
+  if (st.sel !== id) { st.sel = id; st.threads = []; st.thread = null; resetThread(); resetFiles(); }
   ls('ws.sel', String(id));
   renderList(); renderMain();
   await loadThreads();
@@ -230,7 +374,7 @@ async function selectWs(id, threadId) {
   let t = threadId !== undefined ? threadId : (w && w.runningThread) || Number(ls('ws.thread.' + id)) || (st.threads[0] && st.threads[0].id) || null;
   selectThread(t != null && has(t) ? t : null);
 }
-function resetThread() { st.turns = []; st.events = []; st.lastEv = 0; st.liveId = 0; st.running = null; }
+function resetThread() { st.turns = []; st.events = []; st.lastEv = 0; st.liveId = 0; st.running = null; st.pending = []; renderAsks(); }
 function selectThread(id) {
   st.thread = id; resetThread();
   if (st.sel != null) ls('ws.thread.' + st.sel, id ? String(id) : null);
@@ -247,11 +391,13 @@ async function loadThread(inc) {
   if (id !== st.thread) return;                     // 그 사이 다른 대화로 옮겼다
   const was = live();
   if (!inc || d.liveId !== st.liveId) { st.events = []; if (!inc) st.lastEv = 0; }
-  st.turns = d.turns || []; st.liveId = d.liveId; st.running = d.running || null;
+  st.turns = d.turns || []; st.liveId = d.liveId; st.running = d.running || null; st.pending = d.pending || [];
+  renderAsks();
   for (const e of d.events || []) { if (e.id > st.lastEv || !inc) { st.events.push(e); st.lastEv = Math.max(st.lastEv, e.id); } }
   if (st.events.length > 400) st.events = st.events.slice(-400);
   renderMain();
-  if (was && !live()) { loadOverview(); loadThreads(); }   // 방금 끝났다: 목록의 상태 갱신
+  if (was && !live()) { loadOverview(); loadThreads(); if (fs.open) reloadFiles(); }   // 방금 끝났다: 목록의 상태·파일 패널 갱신
+  else if (fs.open) renderTree();                          // 바뀐 파일 표시가 달라졌을 수 있다(다른 대화를 열었을 때)
 }
 function renderMain() {
   const w = cur(), b = $('wchat');
@@ -267,7 +413,7 @@ function renderMain() {
   }
   $('hName').textContent = w.name; $('hPath').textContent = w.path;
   const hm = $('hMode'); hm.textContent = MODE_KO[w.mode] || w.mode; hm.className = 'badge ' + (MODE_CLS[w.mode] || '');
-  hm.title = '이 작업 공간의 권한' + (w.opsMcp ? ' · 운영 MCP 사용' : '') + ' — 왼쪽 목록의 톱니바퀴에서 바꿉니다';
+  hm.title = '이 작업 공간의 실행 방식' + (w.opsMcp ? ' · MCP 도구 사용' : '') + ((w.skills || []).length ? ' · 스킬 ' + w.skills.join(', ') : '') + ' — 왼쪽 목록의 톱니바퀴에서 바꿉니다';
   const lim = st.info && st.info.limited;
   if (!w.exists) { warn.style.display = 'flex'; warn.innerHTML = `<span class="ic">${I.warn}</span><span>폴더가 없습니다: <b>${esc(w.path)}</b> — 옮겼다면 설정(톱니바퀴)에서 경로를 고치세요.</span>`; }
   else if (lim) { warn.style.display = 'flex'; warn.innerHTML = `<span class="ic">${I.warn}</span><span>Claude 사용량 한도에 걸려 있습니다${st.info.limitUntil ? ' (리셋 ' + esc(st.info.limitUntil) + ')' : ''}. 리셋 뒤에 보낼 수 있습니다.</span>`; }
@@ -279,7 +425,7 @@ function renderMain() {
     h = st.thread ? '<div class="wempty"><div>불러오는 중…</div></div>'
       : `<div class="wempty"><div class="wic">${I.terminal}</div><b>${esc(w.name)}</b>
         <div>이 폴더에서 할 일을 적으면 세션이 바로 시작합니다. 같은 대화는 맥락을 이어 가고, 왼쪽의 「새 대화」는 새 세션으로 시작합니다.<br>
-        권한: <b>${MODE_KO[w.mode] || esc(w.mode)}</b>${w.mode === 'full' ? ' — 파일 수정과 명령 실행이 건별 승인 없이 진행됩니다.' : ''}</div>
+        실행 방식: <b>${MODE_KO[w.mode] || esc(w.mode)}</b>${w.mode === 'ask' ? ' — 파일 수정·명령 실행 전에 여기서 허용/거부를 묻습니다.' : ' — 확인 없이 바로 진행됩니다.'}${(w.skills || []).length ? '<br>스킬: ' + w.skills.map(esc).join(', ') : ''}</div>
         <div class="whints">${HINTS.map(x => `<button class="chip" onclick="hint(this)">${esc(x)}</button>`).join('')}</div></div>`;
   }
   for (const t of st.turns) {
@@ -294,8 +440,8 @@ function renderMain() {
     } else {
       const bad = t.state !== 'DONE';
       h += `<div class="wa ${bad ? 'bad' : ''}">${t.answerMd ? `<div class="md">${UI.mdLite(t.answerMd)}</div>` : ''}
-        ${t.lastError ? `<div class="werr">${esc(t.lastError)}</div>` : ''}
-        <div class="wmeta">${bad ? `<span class="badge ${t.state === 'ABORTED' ? 'wait' : 'err'}">${STATE_KO[t.state] || esc(t.state)}</span> ` : ''}${t.turns ? t.turns + '턴 · ' : ''}${t.elapsedMs ? dur(t.elapsedMs) + ' · ' : ''}${t.model ? esc(t.model) + ' · ' : ''}${fmt(t.finishedAt || t.createdAt)}</div></div>`;
+        ${t.lastError ? `<div class="werr">${esc(t.lastError)}</div>` : ''}${chgHtml(t)}
+        <div class="wmeta">${bad ? `<span class="badge ${t.state === 'ABORTED' ? 'wait' : 'err'}">${STATE_KO[t.state] || esc(t.state)}</span> ` : ''}${t.turns ? t.turns + '턴 · ' : ''}${t.elapsedMs ? dur(t.elapsedMs) + ' · ' : ''}${t.model ? esc(t.model) + ' · ' : ''}${fmt(t.finishedAt || t.createdAt)}<span style="flex:1"></span>${t.answerMd ? `<button class="btn sm ghost" onclick="copyAnswer(${t.id})" title="답변 마크다운 복사">복사</button>` : ''}${t.answerMd && reg.projects.length ? `<button class="btn sm ghost" onclick="openRegister(${t.id})" title="이 답변을 GitLab 이슈로 등록해 이슈 에이전트에게 넘깁니다(등록 전에 고칠 수 있음)">이슈로 등록</button>` : ''}</div></div>`;
     }
   }
   UI.set(b, h);
@@ -303,6 +449,10 @@ function renderMain() {
   $('wSend').disabled = live() || st.sending || !w.exists;
 }
 function hint(el) { $('wIn').value = el.textContent; $('wIn').focus(); }
+function copyAnswer(id) {
+  const t = st.turns.find(x => x.id === id); if (!t) return;
+  navigator.clipboard.writeText(t.answerMd || '').then(() => toast('답변을 복사했습니다', 'ok'), () => toast('복사 실패', 'err'));
+}
 
 async function send() {
   const w = cur(), inp = $('wIn'), q = inp.value.trim(); if (!w || !q || st.sending) return;
@@ -312,6 +462,7 @@ async function send() {
     const body = { question: q, model: $('wModel').value }; if (st.thread) body.threadId = st.thread;
     const r = await postJ('/api/workspaces/' + w.id + '/ask', body);
     if (!r.ok) { toast(r.result || '요청을 접수하지 못했습니다.', 'err'); return; }
+    if (st.sel !== w.id) { toast('「' + w.name + '」 에 요청을 보냈습니다.', 'ok'); loadOverview(); return; }   // 보내는 사이 다른 작업 공간으로 옮겼다
     inp.value = ''; grow();
     st.thread = r.threadId; ls('ws.thread.' + w.id, String(r.threadId)); hashSet();
     await loadThread(false);
@@ -330,22 +481,145 @@ $('wIn').addEventListener('input', grow);
 $('wIn').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); } });
 $('wModel').addEventListener('change', e => ls('ws.model', e.target.value || null));
 
+// ---------------------------------------------------------------- 다른 탭에서 넘겨받은 글(리서치 「작업 공간으로」): 입력칸에 넣기만 하고 보내는 것은 사용자가
+// localStorage 의 ws.draft 를 다른 탭 문서가 쓰면 storage 이벤트가 온다(같은 문서에서 쓴 것은 오지 않으므로 처음 열릴 때도 한 번 본다).
+function takeDraft() {
+  let d = null; try { d = JSON.parse(localStorage.getItem('ws.draft') || 'null'); } catch (_) {}
+  if (!d || !d.text || Date.now() - (d.at || 0) > 10 * 60000) return;      // 10분 지난 것은 버린다
+  ls('ws.draft', null);
+  const inp = $('wIn'); inp.value = d.text; grow();
+  const mark = d.text.indexOf('(여기에 할 일을 적으세요)');
+  if (cur()) { selectThread(null); inp.focus(); if (mark >= 0) inp.setSelectionRange(mark, mark + '(여기에 할 일을 적으세요)'.length); inp.scrollTop = 0; }
+  toast((d.from || '넘겨받은 글') + ' 을 입력칸에 넣었습니다 — ' + (st.list.length > 1 ? '작업 공간을 고르고 ' : '') + '할 일을 적어 보내세요.', 'ok');
+}
+window.addEventListener('storage', e => { if (e.key === 'ws.draft' && e.newValue) takeDraft(); });
+
+// ---------------------------------------------------------------- 답변 → GitLab 이슈(작업 공간에서 확인한 것을 이슈 에이전트에게 넘긴다)
+// 대상 프로젝트가 설정돼 있을 때만 버튼이 보인다. 본문은 등록 전에 고칠 수 있고, 자동 등록은 하지 않는다.
+const reg = { projects: [], turn: null };
+async function loadIssueProjects() { try { const d = await getJ('/api/issues-projects'); reg.projects = (d.projects || []).map(p => p.path); } catch (_) { reg.projects = []; } }
+function openRegister(turnId) {
+  const t = st.turns.find(x => x.id === turnId), w = cur(); if (!t || !t.answerMd) return;
+  reg.turn = t;
+  const lines = t.answerMd.replace(/\r/g, '').split('\n'), ti = lines.findIndex(l => /^#{1,3}\s+\S/.test(l));
+  $('riTitle').value = cut(ti >= 0 ? lines[ti].replace(/^#+\s+/, '') : t.question, 120);
+  $('riBody').value = (ti >= 0 ? lines.filter((_, i) => i !== ti).join('\n').trim() : t.answerMd.trim())
+    + '\n\n---\n요청: ' + cut(t.question, 400) + (w ? '\n(작업 공간 「' + w.name + '」 대화에서 정리)' : '');
+  $('riProj').innerHTML = reg.projects.map(p => `<option value="${esc(p)}">${esc(p)}</option>`).join('');
+  $('riDlg').showModal(); $('riTitle').focus(); $('riTitle').select();
+}
+async function registerIssue() {
+  const title = $('riTitle').value.trim();
+  if (!title) { toast('제목을 입력해 주세요.', 'err'); $('riTitle').focus(); return; }
+  const b = $('riGo'); b.disabled = true;
+  try {
+    const r = await postJ('/api/issues-create', { project: $('riProj').value, title, description: $('riBody').value, start: String($('riStart').checked) });
+    toast(r.result, r.ok ? 'ok' : 'err');
+    if (r.ok) $('riDlg').close();
+  } catch (e) { toast('등록 실패: ' + (e && e.message || e), 'err'); }
+  b.disabled = false;
+}
+
+// ---------------------------------------------------------------- 실행 전 확인(「확인 후 실행」 작업 공간)
+// 세션이 파일 수정·명령 실행을 하려 하면 서버가 대기 항목을 만든다(대화 조회의 pending). 입력칸 위에 카드로 띄우고 허용/거부를 보낸다.
+// 대화 영역과 따로 그린다 — 진행 표시가 2초마다 다시 그려져도 거부 사유를 치던 글이 지워지지 않게.
+function renderAsks() {
+  const el = $('wasks'); if (!el) return;
+  let fresh = false;
+  for (const p of st.pending) if (!st.asked.has(p.id)) { st.asked.add(p.id); fresh = true; toast('확인이 필요합니다 — ' + p.tool + (p.summary ? ': ' + cut(p.summary, 60) : ''), 'warn'); }
+  if (fresh) loadOverview();                         // 왼쪽 목록의 「확인 대기」 점을 바로 켠다
+  st.pending = st.pending.filter(p => !st.decided.has(p.id));   // 방금 답한 것이 늦게 온 조회 응답으로 되살아나지 않게
+  const typed = {}; el.querySelectorAll('[data-ask]').forEach(c => { typed[c.dataset.ask] = c.querySelector('input').value; });   // 치던 거부 사유 보존
+  const done = () => el.querySelectorAll('[data-ask]').forEach(c => { if (typed[c.dataset.ask]) c.querySelector('input').value = typed[c.dataset.ask]; });
+  setTimeout(done, 0);
+  UI.set(el, st.pending.map(p => `<div class="wask" data-ask="${p.id}">
+    <div class="ah"><b>실행 전 확인</b><code>${esc(p.tool)}</code><span title="${esc(p.summary)}">${esc(p.summary)}</span></div>
+    ${p.detail && p.detail !== p.summary ? `<pre>${esc(p.detail)}</pre>` : '<div style="height:8px"></div>'}
+    <div class="ab"><button class="btn sm primary" data-act="allow">${I.check}허용</button>
+      <button class="btn sm" data-act="always" title="이번 요청이 끝날 때까지 ${esc(p.tool)} 은(는) 다시 묻지 않습니다">이번 요청은 ${esc(p.tool)} 계속 허용</button>
+      <input class="in" placeholder="거부할 때 전할 말(선택) — 예: 그 파일은 건드리지 마" maxlength="300">
+      <button class="btn sm danger" data-act="deny">${I.x}거부</button></div></div>`).join(''));
+}
+async function decideAsk(id, act, message) {
+  const body = { allow: act === 'deny' ? 'false' : 'true', remember: act === 'always' ? 'true' : 'false' }; if (act === 'deny' && message) body.message = message;
+  st.decided.add(id); renderAsks();
+  try { const r = await postJ('/api/workspaces/approvals/' + id, body); if (!r.ok) toast(r.result, 'warn'); } catch (e) { toast('확인을 보내지 못했습니다', 'err'); }
+  loadThread(true); loadOverview();
+}
+$('wasks').addEventListener('click', e => {
+  const b = e.target instanceof Element ? e.target.closest('[data-act]') : null; if (!b) return;
+  const card = b.closest('[data-ask]'); decideAsk(Number(card.dataset.ask), b.dataset.act, card.querySelector('input').value.trim());
+});
+$('wasks').addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') { const card = e.target.closest('[data-ask]'); decideAsk(Number(card.dataset.ask), 'deny', e.target.value.trim()); } });
+
 // ---------------------------------------------------------------- 등록·설정
+const dlg = { browse: null, autoName: true, skills: new Set() };
+$('dBrowseBtn').innerHTML = IC_FOLDER_S() + '찾아보기';
+function IC_FOLDER_S() { return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>'; }
 function openDlg(id) {
   const w = id == null ? null : st.list.find(x => x.id === id);
   st.editId = w ? w.id : null;
   $('dTitle').textContent = w ? '작업 공간 설정' : '작업 공간 추가';
-  $('dPath').value = w ? w.path : ''; $('dName').value = w ? w.name : '';
-  document.querySelectorAll('input[name="dMode"]').forEach(r => { r.checked = r.value === (w ? w.mode : 'full'); });
+  $('dPath').value = w ? w.path : ''; $('dName').value = w ? w.name : ''; dlg.autoName = !w;
+  document.querySelectorAll('input[name="dMode"]').forEach(r => { r.checked = r.value === (w ? w.mode : 'bypass'); });
   $('dMcp').checked = !!(w && w.opsMcp);
   $('dMcpRow').style.display = st.info && st.info.mcpAvailable ? '' : 'none';
+  dlg.skills = new Set(w ? (w.skills || []) : []); renderSkills();
   $('dDel').style.display = w ? '' : 'none';
   $('dErr').textContent = '';
-  $('wDlg').showModal(); $('dPath').focus();
+  $('wDlg').showModal();
+  // 새로 추가할 때는 찾아보기를 바로 펼친다(경로를 손으로 칠 일이 없게). 설정을 고칠 때는 접어 둔다
+  showBrowse(!w); if (!w) browseTo(''); else $('dName').focus();
 }
+function renderSkills() {
+  const all = (st.info && st.info.skills) || [];
+  if (!all.length) { $('dSkills').innerHTML = '<span class="none">등록된 스킬이 없습니다. <a href="/platform.html">플랫폼 탭</a>의 스킬 카드에서 등록하면 여기서 고를 수 있습니다.</span>'; return; }
+  $('dSkills').innerHTML = all.map(s => s.auto
+    ? `<span class="sk on auto" title="${esc(s.description || '')}\n적용 단계가 「작업 공간」이라 모든 작업 공간에 실립니다">${esc(s.name)} <small>항상</small></span>`
+    : `<span class="sk${dlg.skills.has(s.name) ? ' on' : ''}" data-sk="${esc(s.name)}" title="${esc(s.description || '')}">${esc(s.name)}</span>`).join('');
+}
+$('dSkills').addEventListener('click', e => {
+  const k = e.target instanceof Element ? e.target.closest('[data-sk]') : null; if (!k) return;
+  const n = k.dataset.sk; if (dlg.skills.has(n)) dlg.skills.delete(n); else dlg.skills.add(n); renderSkills();
+});
+function showBrowse(on) { $('dBrw').style.display = on ? '' : 'none'; }
+function toggleBrowse() { const on = $('dBrw').style.display === 'none'; showBrowse(on); if (on) browseTo($('dPath').value.trim()); }
+async function browseTo(dir) {
+  const seq = dlg.seq = (dlg.seq || 0) + 1;
+  let d; try { d = await (await fetch('/api/workspaces/browse?dir=' + encodeURIComponent(dir || ''), { cache: 'no-store' })).json(); } catch (_) { d = { error: '폴더 목록을 읽지 못했습니다.' }; }
+  if (seq !== dlg.seq) return;                       // 더 나중에 누른 폴더의 응답이 이미 왔다
+  if (d.error || d.ok === false) { $('bList').innerHTML = `<div class="bnone">${esc(d.error || d.result || '')}</div>`; return; }
+  dlg.browse = d; renderBrowse();
+}
+function renderBrowse() {
+  const d = dlg.browse; if (!d) return;
+  const sc = (d.shortcuts || []).map(s => `<span class="chip" data-go="${esc(s.path)}" title="${esc(s.path)}">${esc(s.name)}</span>`)
+    .concat((d.roots || []).length > 1 ? d.roots.map(r => `<span class="chip" data-go="${esc(r)}">${esc(r.replace(/[\\/]$/, ''))}</span>`) : []);
+  $('bShort').innerHTML = sc.join('');
+  $('bCrumbs').innerHTML = (d.crumbs || []).map(c => `<a data-go="${esc(c.path)}">${esc(c.name.replace(/[\\/]$/, '') || '/')}</a>`).join('<i>›</i>');
+  $('bList').innerHTML = (d.parent ? `<div class="bd up" data-go="${esc(d.parent)}">${IC_FOLDER_S()}<span>.. (상위 폴더)</span></div>` : '')
+    + (d.items.length ? d.items.map(x => `<div class="bd" data-go="${esc(x.path)}" title="${esc(x.path)}">${IC_FOLDER_S()}<span>${esc(x.name)}</span>${x.git ? '<span class="badge gray" style="flex:none">git</span>' : ''}</div>`).join('')
+      : '<div class="bnone">하위 폴더가 없습니다. 이 폴더를 쓰려면 아래 「이 폴더 선택」을 누르세요.</div>')
+    + (d.more ? '<div class="bnone">… 폴더가 많아 일부만 표시합니다. 경로를 위 칸에 붙여 넣어도 됩니다.</div>' : '');
+  $('bList').scrollTop = 0;
+  const editing = st.editId != null ? st.list.find(x => x.id === st.editId) : null;
+  const ok = d.selectable || (editing && editing.path.toLowerCase() === d.dir.toLowerCase());
+  const bi = $('bInfo'); bi.className = 'bi' + (ok ? '' : ' no');
+  bi.innerHTML = d.missing ? `<span>없는 경로라 기본 위치를 보여 줍니다: ${esc(d.missing)}</span>`
+    : ok ? `<span>지금 위치를 등록합니다</span>${d.git ? '<span class="badge gray">git 저장소</span>' : ''}${d.claudeMd ? '<span class="badge gray">CLAUDE.md 있음</span>' : ''}` : `<span>${esc(d.reason || '')}</span>`;
+  $('bPick').disabled = !ok;
+}
+function pickDir() {
+  const d = dlg.browse; if (!d) return;
+  $('dPath').value = d.dir; $('dErr').textContent = '';
+  if (dlg.autoName || !$('dName').value.trim()) { const c = d.crumbs[d.crumbs.length - 1]; $('dName').value = c ? c.name : ''; dlg.autoName = true; }
+  showBrowse(false); $('dName').focus(); $('dName').select();
+}
+$('dBrw').addEventListener('click', e => { const g = e.target instanceof Element ? e.target.closest('[data-go]') : null; if (g) browseTo(g.dataset.go); });
+$('dName').addEventListener('input', () => { dlg.autoName = false; });
 async function saveWs() {
-  const mode = (document.querySelector('input[name="dMode"]:checked') || {}).value || 'full';
-  const body = { path: $('dPath').value, name: $('dName').value, mode, opsMcp: $('dMcp').checked ? 'true' : 'false' };
+  const mode = (document.querySelector('input[name="dMode"]:checked') || {}).value || 'bypass';
+  const body = { path: $('dPath').value, name: $('dName').value, mode, opsMcp: $('dMcp').checked ? 'true' : 'false', skills: [...dlg.skills].join(',') };
   if (st.editId != null) body.id = st.editId;
   $('dSave').disabled = true;
   try {
@@ -370,11 +644,247 @@ async function removeWs() {
   } catch (e) { $('dErr').textContent = '요청 실패'; }
 }
 $('dPath').addEventListener('input', () => { $('dErr').textContent = ''; });
-$('dPath').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); saveWs(); } });
+// 경로 칸에서 Enter: 찾아보기가 열려 있으면 그 경로로 이동(붙여 넣은 경로 확인), 닫혀 있으면 저장
+$('dPath').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); if ($('dBrw').style.display === 'none') saveWs(); else browseTo($('dPath').value.trim()); } });
 $('dName').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); saveWs(); } });
 
+// ---------------------------------------------------------------- 파일 패널: 폴더 트리 | 파일 보기(원문·마크다운 미리보기·git 변경분)
+// 서버는 작업 공간 루트 안만 읽어 준다(읽기 전용). 경로는 루트 기준 상대 경로('/'). 요소에는 data-* 로 싣고 위임 클릭으로 받는다(경로에 따옴표가 있어도 안전).
+const IC_FOLDER = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
+const IC_TREE = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="9" y1="4" x2="9" y2="20"/></svg>';
+$('btnFiles').innerHTML = IC_FOLDER; $('fTreeBtn').innerHTML = IC_TREE; $('fReload').innerHTML = I.refresh; $('fClose').innerHTML = I.x;
+const fs = { open: false, dirs: new Map(), expanded: new Set(['']), file: null, data: null, mode: 'source', diff: null, err: null, tick: 0 };
+const rawUrl = (p, v) => `/api/workspaces/${st.sel}/raw?path=${encodeURIComponent(p)}${v ? '&v=' + v : ''}`;
+const isMd = p => /\.(md|markdown|mdx)$/i.test(p || '');
+const unesc = s => String(s).replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');   // esc 의 반대
+/** 문서 안의 상대 경로(../fig/a.png)를 루트 기준 경로로. */
+function joinPath(base, u) {
+  let s = String(u).split('#')[0].split('?')[0]; try { s = decodeURI(s); } catch (_) {}
+  const out = s.startsWith('/') ? [] : (base ? base.split('/') : []);
+  for (const p of s.split('/')) { if (!p || p === '.') continue; if (p === '..') out.pop(); else out.push(p); }
+  return out.join('/');
+}
+/** 지금 대화에서 가장 최근에 파일을 바꾼 차례의 변경 목록(경로 → A/M/D). 트리의 점 표시에 쓴다. */
+function changedMap() {
+  const m = new Map();
+  for (let i = st.turns.length - 1; i >= 0; i--) {
+    const c = st.turns[i].changed; if (!c) continue;
+    c.split('\n').forEach(l => { if (l[1] === ' ' && 'AMD'.includes(l[0])) m.set(l.slice(2), l[0]); });
+    break;
+  }
+  return m;
+}
+function chgHtml(t) {
+  if (!t.changed) return '';
+  const rows = t.changed.split('\n'), files = rows.filter(l => l[1] === ' ' && 'AMD'.includes(l[0]));
+  if (!files.length) return '';
+  return `<div class="wchg"><span>바뀐 파일 ${files.length}${rows.length > files.length ? '+' : ''}</span>` + files.slice(0, 24).map(l => {
+    const k = l[0], p = l.slice(2), name = p.slice(p.lastIndexOf('/') + 1);
+    return `<span class="cf ${k}"${k === 'D' ? '' : ` data-open="${esc(p)}"`} title="${esc(p)} (${k === 'A' ? '새 파일' : k === 'M' ? '수정' : '삭제'})"><b>${k}</b><span>${esc(name)}</span></span>`;
+  }).join('') + (files.length > 24 ? `<span>외 ${files.length - 24}개</span>` : '') + '</div>';
+}
+function toggleFiles(on) {
+  fs.open = on == null ? !fs.open : !!on;
+  $('main').classList.toggle('files', fs.open); ls('ws.files', fs.open ? '1' : '0');
+  if (fs.open && st.sel != null) { if (!fs.dirs.has('')) loadDir(''); renderTree(); renderView(); if (fs.file && !fs.data) loadFile(true); }
+}
+function toggleTree() { const off = $('wfiles').classList.toggle('notree'); ls('ws.tree', off ? '0' : null); }
+function resetFiles() {
+  fs.dirs = new Map(); fs.expanded = new Set(['']); fs.data = null; fs.diff = null; fs.err = null;
+  fs.file = st.sel != null ? ls('ws.file.' + st.sel) : null;
+  if (fs.open && st.sel != null) { loadDir(''); if (fs.file) openFile(fs.file); else { renderTree(); renderView(); } }
+}
+async function loadDir(dir) {
+  const ws = st.sel; if (ws == null) return;
+  let d; try { d = await getJ(`/api/workspaces/${ws}/tree?dir=${encodeURIComponent(dir)}`); } catch (_) { d = { error: '조회 실패' }; }
+  if (ws !== st.sel) return;
+  if (d.error) { if (dir) { fs.dirs.delete(dir); fs.expanded.delete(dir); } else fs.dirs.set('', { items: [], error: d.error }); }
+  else fs.dirs.set(dir, d);
+  renderTree();
+}
+function renderTree() {
+  if (!fs.open) return;
+  const ch = changedMap(), chDirs = new Map();
+  ch.forEach((k, p) => { if (k !== 'D') { const ps = p.split('/'); for (let i = 1; i < ps.length; i++) chDirs.set(ps.slice(0, i).join('/'), 1); } });
+  const walk = (dir, depth) => {
+    const d = fs.dirs.get(dir); if (!d) return `<div class="fnote" style="padding-left:${10 + depth * 14}px">불러오는 중…</div>`;
+    if (d.error) return `<div class="fnote">${esc(d.error)}</div>`;
+    if (!d.items.length) return `<div class="fnote" style="padding-left:${10 + depth * 14}px">(비어 있음)</div>`;
+    return d.items.map(x => {
+      const pad = `style="padding-left:${6 + depth * 14}px"`;
+      if (x.dir) {
+        const open = fs.expanded.has(x.path);
+        return `<div class="fr d" data-dir="${esc(x.path)}" ${pad} title="${esc(x.path)}"><span class="cv">${open ? '▾' : '▸'}</span><span class="nm">${esc(x.name)}</span>${chDirs.has(x.path) ? '<span class="chd"></span>' : ''}</div>`
+          + (open ? walk(x.path, depth + 1) : '');
+      }
+      const k = ch.get(x.path);
+      return `<div class="fr${x.path === fs.file ? ' sel' : ''}" data-file="${esc(x.path)}" ${pad} title="${esc(x.path)}"><span class="cv"></span><span class="nm">${esc(x.name)}</span>${k ? `<span class="chd ${k}" title="${k === 'A' ? '이번에 새로 생김' : '이번에 수정됨'}"></span>` : ''}</div>`;
+    }).join('') + (d.more ? `<div class="fnote" style="padding-left:${10 + depth * 14}px">… 항목이 많아 일부만 표시</div>` : '');
+  };
+  UI.set($('ftree'), walk('', 0));
+}
+function toggleDir(path) {
+  if (fs.expanded.has(path)) fs.expanded.delete(path); else { fs.expanded.add(path); if (!fs.dirs.has(path)) loadDir(path); }
+  renderTree();
+}
+/** 파일 열기. 패널이 닫혀 있으면 열고, 트리에서 그 파일까지의 폴더를 펼친다. */
+function openFile(path, mode) {
+  fs.file = path; fs.data = null; fs.diff = null; fs.err = null;
+  fs.mode = mode || (isMd(path) ? (ls('ws.mdmode') || 'preview') : 'source');
+  if (st.sel != null) ls('ws.file.' + st.sel, path);
+  if (!fs.open) { toggleFiles(true); }
+  const ps = path.split('/'); for (let i = 1; i < ps.length; i++) { const d = ps.slice(0, i).join('/'); if (!fs.expanded.has(d)) { fs.expanded.add(d); if (!fs.dirs.has(d)) loadDir(d); } }
+  renderTree(); renderView(); loadFile(true);
+}
+async function loadFile(force) {
+  const ws = st.sel, path = fs.file; if (ws == null || !path) return;
+  const seen = fs.data && !force ? fs.data.mtime : 0;
+  let d; try { d = await getJ(`/api/workspaces/${ws}/file?path=${encodeURIComponent(path)}${seen ? '&ifMtime=' + seen : ''}`); } catch (_) { return; }
+  if (ws !== st.sel || path !== fs.file) return;
+  if (d.error) { fs.err = d.error; fs.data = null; renderView(); return; }
+  if (d.unchanged) return;
+  fs.err = null; fs.data = d;
+  if (fs.mode === 'diff') loadDiff(); else renderView();
+}
+async function loadDiff() {
+  const ws = st.sel, path = fs.file; if (ws == null || !path) return;
+  let d; try { d = await getJ(`/api/workspaces/${ws}/diff?path=${encodeURIComponent(path)}`); } catch (_) { d = { error: '조회 실패' }; }
+  if (ws !== st.sel || path !== fs.file) return;
+  fs.diff = d; renderView();
+}
+function setMode(m) {
+  fs.mode = m; if (isMd(fs.file) && m !== 'diff') ls('ws.mdmode', m);
+  if (m === 'diff') { fs.diff = null; renderView(); loadDiff(); } else renderView();
+}
+async function reloadFiles() {
+  if (st.sel == null) return;
+  await Promise.all([...fs.expanded].filter(d => d === '' || fs.dirs.has(d)).map(loadDir));
+  if (fs.file) loadFile(true);
+}
+function renderView() {
+  if (!fs.open) return;
+  const v = $('fview'), p = fs.file, d = fs.data;
+  if (!p) { $('fPath').textContent = ''; $('fModes').innerHTML = ''; UI.set(v, '<div class="fempty"><div>왼쪽에서 파일을 고르세요.<br>답변 아래의 「바뀐 파일」을 눌러도 여기에 열립니다.</div></div>'); return; }
+  const cut = p.lastIndexOf('/') + 1;
+  UI.set($('fPath'), `${esc(p.slice(0, cut))}<b>${esc(p.slice(cut))}</b>`); $('fPath').title = p + (d ? `\n${(d.size / 1024).toFixed(1)} KB · ${fmt(d.mtime)} 수정` : '');
+  const text = d && d.text != null, modes = text ? (isMd(p) ? [['preview', '미리보기'], ['source', '원문'], ['diff', '변경분']] : [['source', '원문'], ['diff', '변경분']]) : [];
+  if (text && !modes.some(m => m[0] === fs.mode)) fs.mode = modes[0][0];
+  UI.set($('fModes'), modes.map(m => `<button class="tab${m[0] === fs.mode ? ' sel' : ''}" data-mode="${m[0]}"${m[0] === 'diff' ? ' title="마지막 커밋과 비교(git 저장소일 때)"' : ''}>${m[1]}</button>`).join(''));
+  $('fModes').style.display = modes.length ? '' : 'none';
+  let h;
+  if (fs.err) h = `<div class="fempty"><div>${esc(fs.err)}</div></div>`;
+  else if (!d) h = '<div class="fempty"><div>불러오는 중…</div></div>';
+  else if (d.image) h = `<div class="fimg"><img src="${rawUrl(p, d.mtime)}" alt="${esc(d.name)}"></div>`;
+  else if (d.tooBig) h = `<div class="fempty"><div>파일이 커서(${(d.size / 1048576).toFixed(1)} MB) 여기서는 열지 않습니다.</div></div>`;
+  else if (d.binary) h = '<div class="fempty"><div>글이 아닌 파일이라 내용을 보여 주지 않습니다.</div></div>';
+  else if (fs.mode === 'diff') h = diffHtml(fs.diff);
+  else if (fs.mode === 'preview') h = `<div class="doc">${docMemo(p.slice(0, Math.max(0, cut - 1)) + '\u0001' + d.text)}</div>`;
+  else {
+    const n = d.text.split('\n').length; let ln = ''; for (let i = 1; i <= n; i++) ln += i + '\n';
+    h = `<div class="fsrc"><pre class="ln">${ln}</pre><pre class="cd">${esc(d.text)}</pre></div>`;
+  }
+  UI.set(v, h);
+}
+function diffHtml(d) {
+  if (!d) return '<div class="fempty"><div>불러오는 중…</div></div>';
+  if (d.error) return `<div class="fempty"><div>${esc(d.error)}</div></div>`;
+  if (!d.git) return '<div class="fempty"><div>이 폴더는 git 저장소가 아니어서(또는 아직 커밋이 없어서) 변경분을 비교할 수 없습니다.<br>바뀐 파일 목록은 답변 아래에 표시됩니다.</div></div>';
+  if (!d.diff || !d.diff.trim()) return `<div class="fempty"><div>${d.untracked ? '새 파일입니다(아직 커밋된 적 없음) — 전체가 새 내용입니다. 「원문」에서 보세요.' : '마지막 커밋과 같습니다(변경 없음).'}</div></div>`;
+  let on = false, h = '';
+  for (const l of d.diff.replace(/\r/g, '').replace(/\n+$/, '').split('\n')) {
+    if (l.startsWith('@@')) { on = true; h += `<div class="h">${esc(l)}</div>`; continue; }
+    if (!on) continue;                                   // 파일 머리(diff --git · index · --- · +++)
+    const c = l[0];
+    h += `<div class="${c === '+' ? 'a' : c === '-' ? 'd' : c === '\\' ? 'm' : ''}">${esc(l) || ' '}</div>`;
+  }
+  return `<div class="fdiff">${h || '<div class="m">표시할 줄이 없습니다(바이너리이거나 내용 변경 없음)</div>'}${d.truncated ? '<div class="m">… 변경분이 길어 여기까지만 표시합니다</div>' : ''}</div>`;
+}
+/** 문서 미리보기용 마크다운: 제목·문단(줄 이어 붙임)·중첩 목록·인용·코드·표·그림(상대 경로는 작업 공간에서)·링크·굵게/기울임. 수식($…$)은 글자 그대로 둔다. */
+function mdDoc(src, base) {
+  const lines = String(src).replace(/\r/g, '').split('\n'); let out = '', i = 0;
+  const inline = s => {
+    const codes = []; s = s.replace(/`([^`]+)`/g, (_, c) => { codes.push(c); return '\u0000' + (codes.length - 1) + '\u0000'; });
+    s = esc(s)
+      // 주소(u)는 이미 esc 를 거친 글이다. 작업 공간 안의 경로는 원래 글자로 되돌려 풀고(joinPath 가 %22 같은 것을 다시 따옴표로 만든다)
+      // 속성에 넣을 때 반드시 다시 esc 한다 — 빠뜨리면 문서 속 링크가 속성을 끼워 넣어 스크립트를 실행시킬 수 있다. 그림은 https 와 작업 공간 파일만.
+      .replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+&quot;[^)]*&quot;)?\)/g, (_, a, u) => `<img alt="${a}" src="${/^https?:\/\//i.test(u) ? u : esc(rawUrl(joinPath(base, unesc(u))))}">`)
+      .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_, t, u) => /^https?:\/\//i.test(u) ? `<a href="${u}" target="_blank" rel="noopener">${t}</a>` : u.startsWith('#') || /^[a-z][a-z0-9+.-]*:/i.test(unesc(u)) ? t : `<a href="#" data-open="${esc(joinPath(base, unesc(u)))}">${t}</a>`)
+      .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').replace(/(^|[^*\w])\*([^*\s][^*]*)\*/g, '$1<i>$2</i>').replace(/~~([^~]+)~~/g, '<del>$1</del>')
+      .replace(/(^|[\s(])(https?:\/\/[^\s<)]+)/g, '$1<a href="$2" target="_blank" rel="noopener">$2</a>');
+    return s.replace(/\u0000(\d+)\u0000/g, (_, n) => `<code>${esc(codes[+n])}</code>`);
+  };
+  const cells = l => l.trim().replace(/^\||\|$/g, '').split('|').map(c => c.trim());
+  const LIST = /^(\s*)([-*+]|\d+[.)])\s+(.*)$/, special = l => /^(#{1,6}\s|```|~~~|>|\s*([-*_])(\s*\2){2,}\s*$|\$\$)/.test(l) || LIST.test(l);
+  while (i < lines.length) {
+    const l = lines[i]; let m;
+    if (!l.trim()) { i++; continue; }
+    if ((m = /^(```|~~~)/.exec(l.trimStart()))) {
+      const buf = []; i++;
+      while (i < lines.length && !lines[i].trimStart().startsWith(m[1])) buf.push(lines[i++]);
+      i++; out += `<pre><code>${esc(buf.join('\n'))}</code></pre>`; continue;
+    }
+    if (l.trim().startsWith('$$')) {
+      const buf = [l]; if (!(l.trim().length > 4 && l.trim().endsWith('$$'))) { i++; while (i < lines.length) { buf.push(lines[i]); if (lines[i].trim().endsWith('$$')) break; i++; } }
+      i++; out += `<pre class="math">${esc(buf.join('\n'))}</pre>`; continue;
+    }
+    if ((m = /^(#{1,6})\s+(.*?)\s*#*$/.exec(l))) { out += `<h${m[1].length}>${inline(m[2])}</h${m[1].length}>`; i++; continue; }
+    if (/^\s*([-*_])(\s*\1){2,}\s*$/.test(l)) { out += '<hr>'; i++; continue; }
+    if (l.startsWith('>')) {
+      const buf = []; while (i < lines.length && lines[i].startsWith('>')) buf.push(lines[i++].replace(/^>\s?/, ''));
+      out += `<blockquote>${mdDoc(buf.join('\n'), base)}</blockquote>`; continue;
+    }
+    if (/^\s*\|.*\|\s*$/.test(l) && i + 1 < lines.length && /^\s*\|?[\s:|-]+\|[\s:|-]*$/.test(lines[i + 1])) {
+      out += '<table><thead><tr>' + cells(l).map(c => `<th>${inline(c)}</th>`).join('') + '</tr></thead><tbody>'; i += 2;
+      while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) out += '<tr>' + cells(lines[i++]).map(c => `<td>${inline(c)}</td>`).join('') + '</tr>';
+      out += '</tbody></table>'; continue;
+    }
+    if (LIST.test(l)) {
+      const stack = [];
+      while (i < lines.length) {
+        const x = lines[i]; let k = LIST.exec(x);
+        if (k) {
+          const ind = k[1].replace(/\t/g, '    ').length, tag = /\d/.test(k[2]) ? 'ol' : 'ul';
+          while (stack.length && ind < stack[stack.length - 1].i) out += `</li></${stack.pop().t}>`;
+          const top = stack[stack.length - 1];
+          if (top && top.i === ind) out += '</li>'; else { out += tag === 'ol' ? `<ol start="${parseInt(k[2], 10)}">` : '<ul>'; stack.push({ t: tag, i: ind }); }
+          const box = /^\[( |x|X)\]\s+(.*)$/.exec(k[3]);
+          out += '<li>' + (box ? (box[1] === ' ' ? '☐ ' : '☑ ') + inline(box[2]) : inline(k[3])); i++; continue;
+        }
+        if (!x.trim()) { if (i + 1 < lines.length && (LIST.test(lines[i + 1]) || /^\s{2,}\S/.test(lines[i + 1]))) { i++; continue; } break; }
+        if (/^\s{2,}\S/.test(x) || !special(x)) { out += ' ' + inline(x.trim()); i++; continue; }   // 항목에 이어지는 줄
+        break;
+      }
+      while (stack.length) out += `</li></${stack.pop().t}>`;
+      continue;
+    }
+    const buf = [l.trim()]; i++;
+    while (i < lines.length && lines[i].trim() && !special(lines[i]) && !/^\s*\|.*\|\s*$/.test(lines[i])) buf.push(lines[i++].trim());
+    out += `<p>${buf.map(inline).join(' ')}</p>`;
+  }
+  return out;
+}
+const docMemo = UI.memo(k => { const j = k.indexOf('\u0001'); return mdDoc(k.slice(j + 1), k.slice(0, j)); }, 6);
+$('ftree').addEventListener('click', e => {
+  const r = e.target instanceof Element ? e.target.closest('.fr') : null; if (!r) return;
+  if (r.dataset.dir != null) toggleDir(r.dataset.dir); else if (r.dataset.file != null) openFile(r.dataset.file);
+});
+$('fModes').addEventListener('click', e => { const b = e.target instanceof Element ? e.target.closest('[data-mode]') : null; if (b) setMode(b.dataset.mode); });
+const openClick = e => { const a = e.target instanceof Element ? e.target.closest('[data-open]') : null; if (a) { e.preventDefault(); openFile(a.dataset.open); } };
+$('wchat').addEventListener('click', openClick); $('fview').addEventListener('click', openClick);
+document.addEventListener('keydown', e => { if (e.altKey && !e.ctrlKey && !e.metaKey && e.key.toLowerCase() === 'p') { e.preventDefault(); toggleFiles(); } });
+if (ls('ws.tree') === '0') $('wfiles').classList.add('notree');
+{ const pref = ls('ws.files'); fs.open = pref == null ? window.innerWidth >= 1500 : pref === '1'; $('main').classList.toggle('files', fs.open); }
+// 열어 둔 파일은 3초마다 수정 시각만 확인해 바뀌었으면 다시 읽고, 작업 중에는 펼친 폴더도 6초마다 다시 읽는다(가려진 탭은 쉰다)
+setInterval(() => {
+  if (UI.asleep() || !fs.open || st.sel == null) return;
+  fs.tick++;
+  if (fs.file && fs.data) loadFile(false);
+  if (live() && fs.tick % 2 === 0) [...fs.expanded].filter(d => d === '' || fs.dirs.has(d)).forEach(loadDir);
+}, 3000);
+
 // ---------------------------------------------------------------- 갱신: 진행 중이면 2초마다 대화만, 목록은 15초마다(가려진 탭은 쉰다)
-loadOverview();
+loadIssueProjects().then(() => { if (st.turns.length) renderMain(); });
+loadOverview().then(takeDraft);
 UI.every(() => { loadOverview(); if (!live()) loadThreads(); }, 15000);
 setInterval(() => { if (!UI.asleep() && live()) loadThread(true); }, 2000);
 </script>

@@ -137,7 +137,17 @@ window.UI = (() => {
     noticePage = active || '';
     $('noticeBtn').addEventListener('click', e => { e.stopPropagation(); noticeToggle(); });
     $('noticeClear').addEventListener('click', noticeClear);
-    $('noticePanel').addEventListener('click', e => e.stopPropagation());
+    $('noticePanel').addEventListener('click', e => {
+      e.stopPropagation();
+      // 알림의 링크(/research.html#r=… 등)는 탭 전환 셸로 옮긴다. 위에서 전파를 막아 문서의 링크 가로채기가 못 보므로 여기서 직접 —
+      // 그냥 두면 바탕 문서는 통째로 새로 읽히고(열어 둔 탭이 다 사라진다), 탭 안에서는 그 틀만 다른 화면으로 넘어가 버린다.
+      const a = e.target instanceof Element ? e.target.closest('a[href^="/"]') : null;
+      if (a && !e.defaultPrevented && e.button === 0 && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+        const href = a.getAttribute('href');
+        noticeToggle(false);
+        if (nav(href)) e.preventDefault();
+      }
+    });
     document.addEventListener('click', () => { if (noticeOpen()) noticeToggle(false); });
     document.addEventListener('keydown', e => { if (e.key === 'Escape' && noticeOpen()) noticeToggle(false); });
     window.addEventListener('storage', e => { if (e.key === NOTICE_KEY) noticeRender(); });   // 다른 탭에서 쌓인 알림

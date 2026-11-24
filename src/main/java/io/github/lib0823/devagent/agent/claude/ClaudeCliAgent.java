@@ -317,9 +317,9 @@ public class ClaudeCliAgent implements CodingAgent {
             cmd.add("Bash(git push:*)");
             cmd.add("Read(./.env)");                  // 비밀값 파일은 읽기 도구로도 열지 못하게(셸 우회까지 막지는 못한다 — 프롬프트로도 금지)
         }
-        if (ov != null && ov.denyTools() != null) {
-            cmd.addAll(ov.denyTools());               // 호출별 금지 도구(읽기 전용 작업 공간의 편집 도구 등)
-        }
+        Access access = ov == null ? null : ov.access();
+        Permission perm = access == null ? null : access.permission();
+        boolean ask = perm == Permission.ASK && access.askConfig() != null && access.askTool() != null;
         boolean subagents = settings.getAgentSubagents();
         boolean teams = settings.getAgentTeams();
         if (!subagents) {
@@ -333,8 +333,15 @@ public class ClaudeCliAgent implements CodingAgent {
             cmd.add("TeamCreate");
             cmd.add("TeamDelete");
         }
+        // 권한 방식: 기본은 허용 목록 + 편집 자동 승인. 작업 공간은 사용자가 고른다 —
+        //  BYPASS: 묻지 않고 전부 실행(위의 금지 도구는 그대로 적용)
+        //  ASK   : 허용 목록(읽기류) 밖의 도구는 실행 전에 확인 도구(MCP)를 불러 사용자 답을 기다린다
         cmd.add("--permission-mode");
-        cmd.add("acceptEdits");
+        cmd.add(perm == Permission.BYPASS ? "bypassPermissions" : ask ? "manual" : "acceptEdits");
+        if (ask) {
+            cmd.add("--permission-prompt-tool");
+            cmd.add(access.askTool());
+        }
         if (resume) {
             cmd.add("--resume");
             cmd.add(sessionId);
@@ -366,17 +373,26 @@ public class ClaudeCliAgent implements CodingAgent {
             cmd.add("--max-turns");
             cmd.add(String.valueOf(maxTurns));
         }
-        boolean withMcp = mcp.agentEnabled() && !maintain && (ov == null || ov.opsMcp() == null || ov.opsMcp());
+        boolean withMcp = mcp.agentEnabled() && !maintain && (access == null || access.opsMcp() == null || access.opsMcp());
         boolean withPw = (fixStage || (stage == Stage.VERIFY && previewUp)) && shotsDir != null && mcp.playwrightEnabled();
         List<String> tools = new ArrayList<>(allowedTools == null ? List.of() : allowedTools);
-        tools.addAll(docsTools());                    // 사내 문서 검색/읽기(curl → 봇 로컬 API)
+        if (!ask) {
+            // 문서 검색/읽기(curl → 로컬 API). 「확인 후 실행」에는 싣지 않는다: 묻지 않고 도는 curl 이 있으면
+            // 세션이 로컬 API 로 자기 확인을 스스로 허용할 수 있다(Origin 없는 요청은 로컬 도구로 통과하므로)
+            tools.addAll(docsTools());
+        }
         if (!plain) {
             tools.addAll(previewTools(stage));        // preview / jscheck / jspcheck 스크립트
         }
         Path mcpConfig = withPw ? mcp.configFor(shotsDir) : (withMcp ? mcp.configPath() : null);
-        if (mcpConfig != null) {
-            cmd.add("--mcp-config");                  // 운영 데이터(opensearch/postgres/k3s) 읽기 전용 도구 + (수정 단계) playwright
-            cmd.add(mcpConfig.toString());
+        if (mcpConfig != null || ask) {
+            cmd.add("--mcp-config");                  // 운영 데이터(opensearch/postgres/k3s) 읽기 전용 도구 + (수정 단계) playwright + (확인 방식) 확인 도구
+            if (mcpConfig != null) {
+                cmd.add(mcpConfig.toString());
+            }
+            if (ask) {
+                cmd.add(access.askConfig().toString());
+            }
             if (withMcp) {
                 tools.addAll(mcp.tools());
             }
@@ -389,14 +405,15 @@ public class ClaudeCliAgent implements CodingAgent {
             cmd.addAll(tools);
         }
         String sys = systemAppend == null ? "" : systemAppend.strip();
-        String dh = docsHint();
+        String dh = ask ? "" : docsHint();
         if (!dh.isEmpty()) {
             sys = (sys.isEmpty() ? "" : sys + "\n\n") + dh;
         }
         // 플랫폼 스킬: 질의는 research, 플랫폼 관리는 maintain, 작업 공간은 workspace, 그 외는 단계(analyze/fix/verify)에 맞는 지침
         String skillNote = skills == null ? "" : skills.promptNote(
                 maintain ? MAINTAIN_SOURCE : workspace ? WORKSPACE_SOURCE
-                        : ov != null && "research".equals(ov.source()) ? "research" : stage.name().toLowerCase(java.util.Locale.ROOT));
+                        : ov != null && "research".equals(ov.source()) ? "research" : stage.name().toLowerCase(java.util.Locale.ROOT),
+                access == null ? null : access.skills());
         if (!skillNote.isEmpty()) {
             sys = (sys.isEmpty() ? "" : sys + "\n\n") + skillNote;
         }
@@ -444,6 +461,10 @@ public class ClaudeCliAgent implements CodingAgent {
             // Bash 도구 기본 타임아웃(2분)·상한(10분)으로는 preview deploy(빌드 12분+기동 9분, 공유 대기 포함 최대 45분)가 끊긴다
             env.put("BASH_DEFAULT_TIMEOUT_MS", "600000");
             env.put("BASH_MAX_TIMEOUT_MS", String.valueOf(Math.max(600_000L, Math.min(3_000_000L, timeoutMs - 60_000L))));
+            if (ask) {
+                env.put("MCP_TOOL_TIMEOUT", String.valueOf(timeoutMs));   // 확인 도구는 사람이 답할 때까지 응답을 미룬다 → MCP 도구 호출 상한을 실행 상한만큼
+                env.put("CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT", "0");        // HTTP MCP 는 응답 없는 호출을 5분 뒤 끊는다 → 끔(기다림의 상한은 확인 창구가 정한다)
+            }
             installShims();                           // 설정이 바뀌었을 수 있으니 매 실행 전 멱등 갱신
             if (maintain) {
                 // 플랫폼 자신을 빌드한다: 프리뷰 JDK(21)가 아니라 지금 이 JVM 의 JDK(javac 가 있으면)를 쓴다. JRE 로 떴으면 물려받은 JAVA_HOME 그대로
