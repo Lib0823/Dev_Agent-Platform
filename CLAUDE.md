@@ -50,7 +50,7 @@ LLM 호출은 전부 **Claude Code CLI(headless)** 다. 채팅은 warm stream-js
 ## 버전 (11-17)
 
 - `build.gradle` 의 `version` 한 곳(major.minor.patch) → `buildInfo()` → `/api/system/status` → 상단바 배터리 왼쪽 `v1.1.0`·플랫폼 시스템 카드·배포 파일 이름. 시작은 1.0.0(첫 실행 파일 배포), 알림함부터 1.1.0.
-- 플랫폼 관리(렌치 버튼 채팅 창)부터 1.8.0, 메신저 알림 유형별 끄기부터 1.9.0, 리서치 이미지 첨부부터 1.10.0, 기본 스킬부터 1.11.0, 에이전트 화면 문서·Diff 보기 정리부터 1.12.0.
+- 플랫폼 관리(렌치 버튼 채팅 창)부터 1.8.0, 메신저 알림 유형별 끄기부터 1.9.0, 리서치 이미지 첨부부터 1.10.0, 기본 스킬부터 1.11.0, 에이전트 화면 문서·Diff 보기 정리부터 1.12.0, 에이전트 화면 집중 보기·글자 크기·Diff 파일 트리부터 1.13.0.
 - 올리는 기준: **major** = 기존 설치가 그대로는 안 도는 변경(설정 키·DB 스키마 비호환, 실행 방식 변경) / **minor** = 기능 추가(화면·API·설정 추가, 하위 호환) / **patch** = 버그 수정·문구·내부 정리. 사용자에게 보이는 변경을 커밋할 때 같이 올린다(문서만 고친 커밋은 그대로).
 
 ## 플랫폼 관리 (11-23, 1.8.0)
@@ -114,6 +114,7 @@ LLM 호출은 전부 **Claude Code CLI(headless)** 다. 채팅은 warm stream-js
 - 프런트는 `static/ui.css`·`ui.js`(공통 디자인 시스템)를 쓰고, 수정 후 `node --check` 로 스크립트 문법을 확인한다.
 - 탭 전환 셸(1.7.0, `ui.js` "탭 전환(셸)"): 다섯 화면은 별도 문서지만 탭 이동 때 새로 읽지 않는다 — 처음 연 화면이 바탕 문서, 나머지는 화면 전체를 덮는 `iframe.tabframe` 으로 한 번 띄운 뒤 보이기/숨기기만. 그래서 ① 화면 코드에서 탭 사이 이동은 `<a href="/x.html#…">`(자동 가로챔) 또는 `UI.nav(url)` 로 — `location.href` 로 옮기면 iframe 안에서만 이동한다. ② 주기 작업은 `UI.every` 또는 `UI.asleep()` 확인(가려진 탭은 쉰다, `document.hidden` 만 보면 안 됨). ③ 전체 새로고침은 `window.top.location.reload()`. ④ 한 창에 같은 `ui.js` 가 문서마다 따로 돈다(상단바도 문서마다 하나 — 테마는 `storage` 이벤트로 맞춘다). 화면 확인은 `~/AppData/Local/npm-cache/_npx/*/node_modules/playwright` + `ms-playwright/chromium-*/chrome.exe`(executablePath 지정) 헤드리스 스크립트로 가능(실측).
 - 에이전트 화면의 문서·Diff(1.12.0, `agent.html` 의 `md()`·`loadDiff()`): 서버가 주는 글(설계안·변경 요약·검증 보고·git diff)은 그대로 두고 **화면에서만** 구조를 입힌다 — 절(`#`·`##`)마다 카드(`.msec`, 「확인 필요」·「위험」·「수정 요청」은 강조), 들여쓴 목록은 중첩, `[OK]/[SKIP]/[FAIL]`·`PASS/FAIL`·첫 줄 `✅/❌` 는 배지, 「커밋 메시지」 절은 줄바꿈 그대로, 검증 보고의 리뷰어 절은 「독립 리뷰」 카드 안 소제목(`vmdc`). Diff 는 파일별 `<details>` 이고 **줄은 펼칠 때 그린다**(`dfFill`, 전체 400줄 이하면 처음부터 펼침) — 71개 파일·2,485줄 diff 가 처음엔 파일 목록만 DOM 에 있다. 프롬프트의 출력 틀(절 제목)을 바꾸면 이 강조 규칙도 본다. 새 클래스 이름은 `ui.css` 와 겹치지 않게(`.sec` 는 이미 사이드바 제목용 — 겹쳐서 카드가 가로로 깨진 적 있음). 리서치(`research.html`)·플랫폼 관리(`ui.js mtMd`)의 마크다운 변환기는 별개다.
+- 에이전트 화면 보기 설정(1.13.0, `agent.html` 의 `setFz`·`setFocus`·`dfTree`): 글자 크기는 `#main` 의 `--pz` 로 `.pane` 전체를 `zoom` 한다 — 그래서 **pane 안에서 `vh` 로 높이를 잡을 때는 `/ var(--pz, 1)` 로 나눈다**(안 나누면 크게 볼 때 화면을 넘는다). 집중 보기는 `body.focus`(Alt+W)로 사이드바·스테퍼·통계를 CSS 로만 숨긴다(확인 대기 `.act.wait` 는 남김). 둘 다 localStorage(`agent.fz`·`agent.focus`). Diff 파일 트리는 파일 4개 이상일 때만, 변경된 파일만 — 저장소 전체 탐색기는 작업 공간 탭(예정) 소관으로 미뤘다. 화면만 고쳤을 때는 정적 파일을 서빙하고 `/api` GET 만 실행 중인 앱으로 넘기는 작은 서버 + 헤드리스 Playwright 로 재시작 없이 확인할 수 있다(실측).
 - 다시 그리기: 주기 갱신으로 그리는 목록·문서는 `UI.set(el, html)`(내용이 같으면 건너뜀), 마크다운은 `UI.memo(md)`. 세션·스레드 전환은 `UI.swapOut/swapIn`.
 - 사이드바 폭 조절(1.5.0): `UI.splitter(key, 기본폭)` 이 `.body` 에 손잡이를 넣고 `--side-w` 를 바꾼다(localStorage `da-side-<key>`, 더블클릭 = 기본). 손잡이 위치(`ui.css .splitter`)는 `.body` 의 padding 22px·gap 18px 을 전제로 하니 그 값을 바꾸면 같이 고친다. 리서치 탭의 접기 상태는 `research.fold.*`.
 

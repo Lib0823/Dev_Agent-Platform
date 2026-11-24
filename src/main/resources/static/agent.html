@@ -118,14 +118,26 @@
   .act .btns { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
   .act .note { font-size: 12px; color: var(--muted); margin-left: auto; }
   .errbox { margin-top: 14px; white-space: pre-wrap; }
-  .seg.tabs { margin-bottom: 14px; }
+  .tabrow { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+  .tabrow .sp { flex: 1; }
+  .seg.fz .tab { padding: 0 10px; } .seg.fz .tab[data-z="m"] { font-size: 14.5px; } .seg.fz .tab[data-z="l"] { font-size: 16.5px; }
+  #btnFocus.on { border-color: color-mix(in srgb, var(--accent) 55%, transparent); color: var(--text); }
+
+  /* ---------- 보기 설정(1.13.0): 글자 크기 = 탭 본문 전체 확대(--pz), 집중 보기 = 사이드바·제목 부속·스테퍼를 접고 본문만 ---------- */
+  .pane { zoom: var(--pz, 1); }
+  body.focus .body { grid-template-columns: minmax(0, 1fr); padding: 12px 14px 18px; }
+  body.focus .sidebar, body.focus .splitter, body.focus .hero .links, body.focus .hero .stats, body.focus .runner,
+  body.focus .flow, body.focus .act:not(.wait) { display: none !important; }      /* 확인 대기(진행·피드백)는 집중 보기에서도 남긴다 */
+  body.focus .content { padding: 14px 18px 18px; }
+  body.focus .hero h1 { font-size: 15px; margin: 6px 0 10px; }
+  body.focus .term { max-height: max(320px, calc((100vh - 262px) / var(--pz, 1))); }
 
   /* ---------- activity log ---------- */
   .logbar { display: flex; gap: 14px; align-items: center; font-size: 12.5px; color: var(--muted); margin-bottom: 8px; flex-wrap: wrap; }
   .logbar label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; user-select: none; }
   .logbar input { accent-color: var(--accent); }
   .logbar .sp { flex: 1; }
-  .term { font-family: var(--mono); font-size: 12.5px; line-height: 1.6; background: var(--term); color: var(--term-text); border-radius: 12px; padding: 12px 6px 12px 12px; max-height: 62vh; overflow: auto; border: 1px solid var(--line); }
+  .term { font-family: var(--mono); font-size: 12.5px; line-height: 1.6; background: var(--term); color: var(--term-text); border-radius: 12px; padding: 12px 6px 12px 12px; max-height: max(62vh, calc((100vh - 150px) / var(--pz, 1))); overflow: auto; border: 1px solid var(--line); }
   .ln { display: grid; grid-template-columns: 64px 20px 1fr; gap: 10px; padding: 2px 8px 2px 4px; border-radius: 6px; white-space: pre-wrap; word-break: break-word; }
   .ln:hover { background: rgba(255,255,255,.04); }
   .ln.has { cursor: pointer; }
@@ -137,7 +149,7 @@
   .k-REPLY .m { color: #86efac; font-weight: 600; } .k-GIT .m, .k-GITLAB .m { color: #fdba74; }
   .k-ERROR .m { color: #fca5a5; font-weight: 700; } .k-INFO .m { color: #a5b4fc; }
   .ln.k-STATE, .ln.k-CLAUDE, .ln.k-REPLY { margin-top: 4px; }
-  .det { display: none; margin: 2px 8px 8px 94px; padding: 10px 12px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.07); border-radius: 8px; color: #c7cfdf; white-space: pre-wrap; max-height: 340px; overflow: auto; font-size: 12px; }
+  .det { display: none; margin: 2px 8px 8px 94px; padding: 10px 12px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.07); border-radius: 8px; color: #c7cfdf; white-space: pre-wrap; max-height: 60vh; overflow: auto; font-size: 12px; }
   .det.open { display: block; }
   .term .none { color: #5b667d; padding: 10px 6px; }
 
@@ -169,9 +181,27 @@
   .dfb .del { background: color-mix(in srgb, var(--err) 13%, transparent); color: var(--err); }
   .dfb .hunk { background: color-mix(in srgb, var(--info) 10%, transparent); color: var(--info); padding: 2px 12px; }
   .dfb .meta { color: var(--muted); padding-left: 12px; }
+  /* 변경 파일 트리(파일 4개 이상일 때 왼쪽에): 누르면 그 파일을 펼치고 그 자리로 간다 */
+  .df { scroll-margin-top: 74px; }
+  .dwrap { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 12px; align-items: start; }
+  .dtree { position: sticky; top: 74px; max-height: calc((100vh - 96px) / var(--pz, 1)); overflow: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface2); padding: 8px 6px; font-size: 12.5px; }
+  .dtd > summary { list-style: none; cursor: pointer; user-select: none; padding: 3px 6px; border-radius: 6px; color: var(--text2); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .dtd > summary::-webkit-details-marker { display: none; }
+  .dtd > summary::before { content: "▸"; display: inline-block; width: 12px; color: var(--muted); }
+  .dtd[open] > summary::before { content: "▾"; }
+  .dtd > summary:hover { background: var(--raised); }
+  .dtc { margin-left: 9px; padding-left: 5px; border-left: 1px solid var(--line); }
+  .dtf { display: flex; gap: 6px; align-items: center; padding: 3px 6px; border-radius: 6px; cursor: pointer; font-family: var(--mono); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .dtf[hidden] { display: none; }
+  .dtf:hover, .dtf.cur { background: var(--raised); }
+  .dtf.cur { box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent) inset; }
+  .dtf .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dtf.new .nm { color: var(--ok); } .dtf.gone .nm { color: var(--err); text-decoration: line-through; }
+  .dtf .a { color: var(--ok); } .dtf .d { color: var(--err); }
+  @media (max-width: 1100px) { .dwrap { grid-template-columns: minmax(0, 1fr); } .dtree { display: none; } }
 
   /* ---------- 문서(설계안·변경 요약·검증): 절마다 카드 ---------- */
-  .pane .md { max-width: 980px; }
+  .pane .md { max-width: 1280px; }
   .pane .md .msec { border: 1px solid var(--line); border-radius: 12px; background: var(--surface2); padding: 13px 18px 9px; margin: 0 0 10px; }
   .pane .md .msec > h2 { margin: 0 0 8px; font-size: 14.5px; }
   .pane .md .msec.warn { border-color: color-mix(in srgb, var(--warn) 38%, var(--line)); }
@@ -192,7 +222,7 @@
   .pane .md pre.commit { white-space: pre-wrap; word-break: break-word; margin: 0 0 6px; }
 
   /* ---------- timeline ---------- */
-  .tl { position: relative; padding-left: 26px; max-width: 980px; }
+  .tl { position: relative; padding-left: 26px; max-width: 1280px; }
   .tl::before { content: ""; position: absolute; left: 9px; top: 6px; bottom: 6px; width: 2px; background: var(--line2); }
   .ev { position: relative; padding: 8px 0 10px 8px; display: grid; grid-template-columns: 110px 1fr; gap: 12px; align-items: baseline; }
   .ev::before { content: ""; position: absolute; left: -22px; top: 13px; width: 10px; height: 10px; border-radius: 50%; background: var(--muted); border: 2px solid var(--surface); }
@@ -201,7 +231,7 @@
   .ev .m { font-size: 13.5px; white-space: pre-wrap; word-break: break-word; }
   .ev .m .kd { font-size: 10.5px; font-weight: 700; letter-spacing: .04em; color: var(--muted); margin-right: 8px; }
   .ev.has .m { cursor: pointer; }
-  .ev .det2 { grid-column: 1 / -1; display: none; background: var(--surface2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; white-space: pre-wrap; font-size: 12px; max-height: 360px; overflow: auto; font-family: var(--mono); }
+  .ev .det2 { grid-column: 1 / -1; display: none; background: var(--surface2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; white-space: pre-wrap; font-size: 12px; max-height: 60vh; overflow: auto; font-family: var(--mono); }
   .ev .det2.open { display: block; }
 
   /* ---------- screenshots ---------- */
@@ -294,14 +324,23 @@
           </div>
         </section>
 
-        <div class="seg tabs" role="tablist">
-          <button class="tab sel" data-p="log">활동 로그 <span class="cnt" id="cntLog">0</span></button>
-          <button class="tab" data-p="design">설계안</button>
-          <button class="tab" data-p="summary">변경 요약</button>
-          <button class="tab" data-p="verify">검증 <span class="cnt" id="cntVerify" style="display:none"></span></button>
-          <button class="tab" data-p="diff">Diff</button>
-          <button class="tab" data-p="sub">서브 에이전트 <span class="cnt" id="cntSub" style="display:none"></span></button>
-          <button class="tab" data-p="tl">타임라인 <span class="cnt" id="cntTl">0</span></button>
+        <div class="tabrow">
+          <div class="seg tabs" role="tablist">
+            <button class="tab sel" data-p="log">활동 로그 <span class="cnt" id="cntLog">0</span></button>
+            <button class="tab" data-p="design">설계안</button>
+            <button class="tab" data-p="summary">변경 요약</button>
+            <button class="tab" data-p="verify">검증 <span class="cnt" id="cntVerify" style="display:none"></span></button>
+            <button class="tab" data-p="diff">Diff</button>
+            <button class="tab" data-p="sub">서브 에이전트 <span class="cnt" id="cntSub" style="display:none"></span></button>
+            <button class="tab" data-p="tl">타임라인 <span class="cnt" id="cntTl">0</span></button>
+          </div>
+          <span class="sp"></span>
+          <div class="seg fz" title="글자 크기(로그·문서·Diff)">
+            <button class="tab" data-z="s" onclick="setFz('s')">가</button>
+            <button class="tab" data-z="m" onclick="setFz('m')">가</button>
+            <button class="tab" data-z="l" onclick="setFz('l')">가</button>
+          </div>
+          <button class="btn sm" id="btnFocus" onclick="setFocus()" title="사이드바·진행 단계를 접고 본문만 넓게 봅니다 (Alt+W)"></button>
         </div>
 
         <div class="pane sel" id="p-log">
@@ -887,12 +926,32 @@ async function loadDiff() {
       <b>파일 ${p.files.length}개</b><span class="a">+${add}</span><span class="d">−${del}</span><span class="sp"></span>
       ${p.files.length > 8 ? '<input class="in" placeholder="파일 이름으로 거르기" oninput="dfFilter(this.value)">' : ''}
       <button class="btn sm" onclick="dfAll(true)">모두 펼치기</button><button class="btn sm" onclick="dfAll(false)">모두 접기</button></div>
-    <div class="diff">` + p.files.map((f,i) => {
+    ${p.files.length >= 4 ? `<div class="dwrap"><nav class="dtree">${dfTree()}</nav>` : ''}<div class="diff">` + p.files.map((f,i) => {
       const cut = f.path.lastIndexOf('/') + 1;
       return `<details class="df" data-i="${i}" ontoggle="dfFill(this)"${open ? ' open' : ''}><summary><span class="p" title="${esc(f.path)}"><b>${esc(f.path.slice(cut))}</b><span class="dir">${esc(f.path.slice(0,cut))}</span></span>${f.tag ? `<span class="tg">${f.tag}</span>` : ''}
         <span class="cnt">${f.add ? `<span class="a">+${f.add}</span>` : ''}${f.del ? `<span class="d">−${f.del}</span>` : ''}</span></summary><div class="dfb"></div></details>`;
-    }).join('') + '</div>';
+    }).join('') + '</div>' + (p.files.length >= 4 ? '</div>' : '');
   if (open) box.querySelectorAll('.df').forEach(dfFill);
+}
+/** 변경 파일을 폴더 트리로 그린다. 파일 없이 하위 폴더 하나만 가진 폴더는 한 줄(a/b/c)로 합친다. */
+function dfTree() {
+  const root = { d: {}, f: [] };
+  diffFiles.forEach((f, i) => {
+    const ps = f.path.split('/'); let n = root;
+    for (const p of ps.slice(0, -1)) n = n.d[p] || (n.d[p] = { d: {}, f: [] });
+    n.f.push({ i, f, name: ps[ps.length - 1] });
+  });
+  const walk = n => Object.keys(n.d).sort().map(k => {
+    let name = k, c = n.d[k], ks;
+    while (!c.f.length && (ks = Object.keys(c.d)).length === 1) { name += '/' + ks[0]; c = c.d[ks[0]]; }
+    return `<details class="dtd" open><summary title="${esc(name)}">${esc(name)}</summary><div class="dtc">${walk(c)}</div></details>`;
+  }).join('') + n.f.map(x => `<div class="dtf${x.f.tag === '신규' ? ' new' : x.f.tag === '삭제' ? ' gone' : ''}" data-i="${x.i}" title="${esc(x.f.path)}${x.f.tag ? ' (' + x.f.tag + ')' : ''}" onclick="dfGo(${x.i})"><span class="nm">${esc(x.name)}</span>${x.f.add ? `<span class="a">+${x.f.add}</span>` : ''}${x.f.del ? `<span class="d">−${x.f.del}</span>` : ''}</div>`).join('');
+  return walk(root);
+}
+function dfGo(i) {
+  const el = document.querySelector(`#diff .df[data-i="${i}"]`); if (!el) return;
+  el.open = true; dfFill(el); el.scrollIntoView({ block: 'start' });
+  document.querySelectorAll('#diff .dtf').forEach(e => e.classList.toggle('cur', +e.dataset.i === i));
 }
 let diffFiles = [];
 /** git diff/show 출력을 파일 단위로 나눈다. 파일 머리(index·---·+++)는 버리고 추가/삭제 줄 수를 센다. */
@@ -932,7 +991,30 @@ function dfFill(el) {
   el.querySelector('.dfb').innerHTML = `<div class="w">${h || '<div class="l meta">표시할 줄이 없습니다(바이너리이거나 내용 변경 없음)</div>'}</div>`;
 }
 function dfAll(open) { document.querySelectorAll('#diff .df').forEach(e => { if (e.style.display !== 'none') e.open = open; }); }
-function dfFilter(q) { q = q.trim().toLowerCase(); document.querySelectorAll('#diff .df').forEach(e => { e.style.display = !q || diffFiles[+e.dataset.i].path.toLowerCase().includes(q) ? '' : 'none'; }); }
+function dfFilter(q) {
+  q = q.trim().toLowerCase(); const hit = e => !q || diffFiles[+e.dataset.i].path.toLowerCase().includes(q);
+  document.querySelectorAll('#diff .df').forEach(e => { e.style.display = hit(e) ? '' : 'none'; });
+  document.querySelectorAll('#diff .dtf').forEach(e => { e.hidden = !hit(e); });
+  document.querySelectorAll('#diff .dtd').forEach(e => { e.style.display = e.querySelector('.dtf:not([hidden])') ? '' : 'none'; });
+}
+
+// ---------------------------------------------------------------- 보기 설정: 글자 크기 · 집중 보기 (브라우저에 기억)
+const FZ = { s: 1, m: 1.1, l: 1.22 };
+function setFz(k) {
+  if (!FZ[k]) k = 's';
+  $('main').style.setProperty('--pz', FZ[k]);
+  document.querySelectorAll('.fz .tab').forEach(b => b.classList.toggle('sel', b.dataset.z === k));
+  try { localStorage.setItem('agent.fz', k); } catch(e) {}
+}
+function setFocus(on) {
+  if (on == null) on = !document.body.classList.contains('focus');
+  document.body.classList.toggle('focus', on);
+  const b = $('btnFocus'); b.classList.toggle('on', on); b.innerHTML = (on ? '기본 보기' : '집중 보기') + ' <span class="kbd">Alt+W</span>';
+  try { localStorage.setItem('agent.focus', on ? '1' : ''); } catch(e) {}
+  if (currentPane() === 'log' && $('follow').checked) { const l = $('log'); l.scrollTop = l.scrollHeight; }
+}
+document.addEventListener('keydown', e => { if (e.altKey && !e.ctrlKey && !e.metaKey && e.key.toLowerCase() === 'w') { e.preventDefault(); setFocus(); } });
+{ let z = 's', f = false; try { z = localStorage.getItem('agent.fz') || 's'; f = !!localStorage.getItem('agent.focus'); } catch(e) {} setFz(z); setFocus(f); }
 
 // ---------------------------------------------------------------- tabs
 document.querySelectorAll('.tabs .tab').forEach(t => t.addEventListener('click', () => {
