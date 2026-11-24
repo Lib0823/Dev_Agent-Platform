@@ -14,6 +14,7 @@
 | 루틴(예약 질의) | `routine/`, `admin/RoutineController` | 요일·시각마다 같은 질문을 질의 워크플로우에 접수(1분 틱). 리서치 탭 "예약" · 루틴 목록 |
 | 기동·배포 | `boot/`, `gradle/dist.gradle`, `admin/SystemController`, `ops/Doctor` | `.env` 틀·메신저 없음 모드·내장 DB(`Bootstrap`/`EmbeddedDb`), 실행 파일 모드 감시자+트레이(`Launcher`), 설치 점검·재시작·구성 묶음 |
 | 알림함 | `notify/`, `admin/NotificationController`, `ui.js` | 상단 종 버튼(Alt+N): 화면 토스트 기록(localStorage) + 플랫폼 알림(이슈·질의·시스템, `notification` 테이블)을 합쳐 보여 준다. 메신저와 독립 |
+| 작업 공간 | `workspace/`, `admin/WorkspaceController`, `static/workspace.html` | 「작업 공간」 탭(Alt+4): 사용자가 등록한 폴더를 작업 디렉터리로 한 Claude 세션과 대화하며 파일 수정·명령 실행(이슈·GitLab 없이 바로, 코드 저장소가 아니어도 됨) |
 | 플랫폼 관리 | `maintain/`, `admin/MaintainController`, `ui.js`(mt*) | 상단 렌치 버튼(Alt+M) 채팅 창: 이 저장소를 작업 디렉터리로 한 Claude 세션이 플랫폼 자체의 버그 확인·수정·빌드·커밋·스킬 등록. 푸시·재시작은 창의 버튼 |
 | 운영 MCP | `mcp/` | opensearch/postgres/k3s-ops 읽기 전용 도구를 Claude CLI 에 `--mcp-config` 로 제공. 자기방 `@AI 운영 …` 질의, 에이전트 분석/수정에 활용 |
 | 로컬 프리뷰 | `preview/`, `scripts/bin/preview` | worktree → Maven WAR → 봇 호스트 Tomcat 배포 → Playwright MCP 로 화면 검증·스크린샷 |
@@ -27,7 +28,7 @@ LLM 호출은 전부 **Claude Code CLI(headless)** 다. 채팅은 warm stream-js
 - Windows 에서 소스로 돌릴 때는 작업 스케줄러 작업 `dev-agent`(`install-autostart.ps1`)가 `run.cmd`(감시 루프)로 띄운다. **java 를 직접 죽이지 말 것** — `stop.cmd` / `restart.cmd` 사용. PowerShell 에서 `& ".\restart.cmd"`.
 - 빌드: JDK 17 로 `.\gradlew.bat test bootJar`. 산출물 `build/libs/dev-agent.jar`. `run.cmd` 는 기동 때마다 이것을 `run/dev-agent.jar` 로 복사해 실행하므로 **봇이 도는 중에 빌드해도 안전**하다(이전엔 jar 를 덮어써 실행 중인 JVM 이 NoClassDefFoundError 로 망가진 적 있음). 새 빌드는 재시작해야 반영된다.
 - **재시작은 이슈 세션이 대기 상태(DESIGN_WAIT/REVIEW_WAIT)일 때만.** 작업 중(ANALYZING/FIXING/VERIFYING/PUSHING) 재시작하면 그 세션은 FAILED 처리된다. 확인: `GET http://localhost:8777/api/issues`.
-- 화면(**Dev Agent**): `http://localhost:8777/` → 홈 `/home.html`(Alt+1, 전체 현황) · 에이전트 `/agent.html`(Alt+2) · 질의 `/research.html`(Alt+3, 탭 이름 「리서치」) · 메신저 `/messenger.html`(Alt+4, 방 설정·최근 활동) · 플랫폼 `/platform.html`(Alt+5, 연동·에이전트 설정·스킬·MCP·RAG). 예전 `/index.html`·`/admin.html` 은 메신저로 리다이렉트(`admin/WebConfig`). 홈·메신저·플랫폼은 `static/admin.js`·`admin.css` 를 함께 쓰고 각 HTML 이 필요한 `load*()` 만 부른다 — **admin.js 최상위에서 요소에 이벤트를 걸 때는 `on(id, ev, fn)`**(요소가 없는 화면에서 예외가 나면 그 화면 전체가 멈춘다). 전부 localhost 전용.
+- 화면(**Dev Agent**): `http://localhost:8777/` → 홈 `/home.html`(Alt+1, 전체 현황) · 에이전트 `/agent.html`(Alt+2) · 질의 `/research.html`(Alt+3, 탭 이름 「리서치」) · 작업 공간 `/workspace.html`(Alt+4, 등록한 폴더에서 대화하며 작업) · 메신저 `/messenger.html`(Alt+5, 방 설정·최근 활동) · 플랫폼 `/platform.html`(Alt+6, 연동·에이전트 설정·스킬·MCP·RAG). 예전 `/index.html`·`/admin.html` 은 메신저로 리다이렉트(`admin/WebConfig`). 홈·메신저·플랫폼은 `static/admin.js`·`admin.css` 를 함께 쓰고 각 HTML 이 필요한 `load*()` 만 부른다 — **admin.js 최상위에서 요소에 이벤트를 걸 때는 `on(id, ev, fn)`**(요소가 없는 화면에서 예외가 나면 그 화면 전체가 멈춘다). 전부 localhost 전용.
 - 설정은 `application.yml`(기본값) + `.env`(비밀값, git 제외). 예시는 `.env.example`. **토큰/비밀번호는 절대 커밋하지 않는다.**
 - 로그: `logs/dev-agent.log`. DocIngest DEBUG 가 시끄러우니 grep 시 제외.
 
@@ -50,7 +51,7 @@ LLM 호출은 전부 **Claude Code CLI(headless)** 다. 채팅은 warm stream-js
 ## 버전 (11-17)
 
 - `build.gradle` 의 `version` 한 곳(major.minor.patch) → `buildInfo()` → `/api/system/status` → 상단바 배터리 왼쪽 `v1.1.0`·플랫폼 시스템 카드·배포 파일 이름. 시작은 1.0.0(첫 실행 파일 배포), 알림함부터 1.1.0.
-- 플랫폼 관리(렌치 버튼 채팅 창)부터 1.8.0, 메신저 알림 유형별 끄기부터 1.9.0, 리서치 이미지 첨부부터 1.10.0, 기본 스킬부터 1.11.0, 에이전트 화면 문서·Diff 보기 정리부터 1.12.0, 에이전트 화면 집중 보기·글자 크기·Diff 파일 트리부터 1.13.0.
+- 플랫폼 관리(렌치 버튼 채팅 창)부터 1.8.0, 메신저 알림 유형별 끄기부터 1.9.0, 리서치 이미지 첨부부터 1.10.0, 기본 스킬부터 1.11.0, 에이전트 화면 문서·Diff 보기 정리부터 1.12.0, 에이전트 화면 집중 보기·글자 크기·Diff 파일 트리부터 1.13.0, 작업 공간 탭부터 1.14.0.
 - 올리는 기준: **major** = 기존 설치가 그대로는 안 도는 변경(설정 키·DB 스키마 비호환, 실행 방식 변경) / **minor** = 기능 추가(화면·API·설정 추가, 하위 호환) / **patch** = 버그 수정·문구·내부 정리. 사용자에게 보이는 변경을 커밋할 때 같이 올린다(문서만 고친 커밋은 그대로).
 
 ## 플랫폼 관리 (11-23, 1.8.0)
@@ -62,6 +63,17 @@ LLM 호출은 전부 **Claude Code CLI(headless)** 다. 채팅은 warm stream-js
 - 화면은 `ui.js` 의 "플랫폼 관리" 블록 하나(모든 탭 공통, `dialog.maint`). **SSE 를 쓰지 않고** 창이 열린 동안만 폴링한다(진행 중 2초, 저장소 상태 10초) — 탭 문서마다 연결을 열면 호스트당 6개 제한에 닿는다. 창(dialog)이 떠 있으면 토스트가 가려지므로 안내는 `mtNote`(창 안 한 줄). 알림함 항목의 link `#maintain` 은 창을 여는 신호.
 - 스킬 단계 키에 `maintain` 추가(`AgentSkill.STAGES`). 예전에 "전 단계"로 저장된 스킬은 네 단계가 명시돼 있어 플랫폼 관리 세션에는 실리지 않는다(대상 프로젝트용 지침이 섞이지 않게 — 의도된 동작).
 - 이 세션(Claude Code)의 Bash 도구에서 **작은따옴표가 든 따옴표 친 heredoc(`<<'EOF'`)은 "unexpected EOF" 로 깨진다**(11-23 두 번 실측). 여러 파일을 스크립트로 고칠 때는 스크립트를 Write 도구로 파일에 쓴 뒤 실행.
+
+## 작업 공간 (11-24, 1.14.0)
+
+- 목적: 이슈로 등록할 만큼은 아닌 수정·인프라 확인·논문/문서/실험 폴더 작업을 **바로 소통하며** 처리(터미널·VSCode 의 Claude Code 를 켜던 일). 플랫폼을 사내 전용이 아닌 범용 도구로 쓰려면 GitLab 없이 일을 시작하는 길이 필요하다. 엔진은 플랫폼 관리와 같은 구조다(`WorkspaceService` ≈ `MaintainService`: 대화 = 세션 하나 `--resume`, 재기동 때 RUNNING 은 FAILED 로 닫고 「이어서 진행해 줘」, 이벤트는 `IssueEventBus` 공유, 세션 id = `EVENT_BASE(30억)` + 차례 id). 플랫폼 관리는 "이 저장소 하나 + 푸시·재시작 버튼"인 특수한 경우로 그대로 뒀다 — 두 서비스를 합치는 일은 아직 하지 않았다(중복: 실행 루프 90줄).
+- 작업 공간 = 등록한 폴더 하나(`workspace` 테이블), worktree 없음 → **같은 작업 공간은 한 번에 한 요청**(`findActiveIn`), 다른 작업 공간끼리는 `workspace.concurrency`(기본 2) 워커 풀. `checkPath` 가 절대 경로·실제 디렉터리만 받고 드라이브 루트·사용자 홈 자체는 거부한다.
+- **권한은 작업 공간의 `mode`(read/edit/full)가 전부다** — 헤드리스 실행이라 건별 승인 창이 없다. `allowTools`/`denyTools` 로 사상하는데, **`--permission-mode acceptEdits` 에서는 허용 목록에 없어도 편집 도구가 돈다** → 읽기 전용은 `Overrides.denyTools` 로 `--disallowedTools` 에 넣어야 막힌다(그래서 `CodingAgent.Overrides` 에 `opsMcp`·`denyTools` 를 추가했다, 5인자 생성자는 그대로). full 의 `Bash` 는 접두 제한 없이 전부(사용자가 자기 폴더에 준 권한, push 포함 — 프롬프트로 "요청받았을 때만").
+- `ClaudeCliAgent` 는 source 가 `workspace` 면 프리뷰 도구·안내·프리뷰 JDK(JAVA_HOME)를 싣지 않고(사용자 환경 그대로), 운영 MCP 는 작업 공간의 `ops_mcp`(기본 꺼짐)를 따르며, 스킬 단계 키는 `workspace`(`AgentSkill.STAGES` 에 추가 — fix 단계용 대상 프로젝트 지침이 논문 폴더 세션에 섞이지 않게).
+- 상태를 바꾸는 API(`POST /api/workspaces`, `…/{id}/ask`, `…/{id}/delete`, `…/turns/{id}/abort`)는 전부 `SystemController.foreign(req)` 확인 — 폴더 등록과 요청이 코드 실행으로 이어진다. 새 엔드포인트도 지킬 것. `busyCount` 에 `workspaces.busyCount()` 포함.
+- 화면 `workspace.html`: 왼쪽 작업 공간(고른 것 아래에 대화 목록) · 오른쪽 대화. SSE 없이 폴링(진행 중 2초 대화만, 목록 15초 `UI.every`). 주소 `#w=<작업 공간>&t=<대화>`(알림함 링크도 이 형식), 마지막으로 보던 것은 localStorage `ws.sel`·`ws.thread.<id>`·`ws.model`. 답변 마크다운은 `UI.mdLite`(= 플랫폼 관리의 `mtMd`). 탭이 여섯이 되면서 단축키가 밀렸다(메신저 Alt+5, 플랫폼 Alt+6) — 탭을 추가하면 `ui.js` 의 nav·단축키 맵·`TABS`·`PAGE_NAMES` 네 곳.
+- 구성 묶음(`BundleController`)에는 넣지 않았다(경로가 PC 마다 다르다). 아직 없는 것: 오른쪽 파일 패널(폴더 트리·파일 보기·변경분), 마크다운 미리보기, 긴 실험의 백그라운드 실행, 홈 화면 요약.
+- 재시작하지 않고 화면만 볼 수는 없다(새 API 가 필요) — E2E 는 시험 폴더를 등록해 haiku 로 한두 차례 돌려 확인했다(편집 모드에서 파일 수정·후속 질문의 맥락 유지, 읽기 모드에서 파일 미변경).
 
 ## 알림함 (11-17)
 
@@ -112,7 +124,7 @@ LLM 호출은 전부 **Claude Code CLI(headless)** 다. 채팅은 warm stream-js
 - DB 스키마 변경은 매퍼의 `ensureTable()`(멱등) 과 `db/schema.sql` 둘 다.
 - 단위 테스트: `src/test/java` (JUnit 5, Spring 컨텍스트 없이 순수 단위). `gradlew test` 로 전부 통과시킨 뒤 jar 빌드.
 - 프런트는 `static/ui.css`·`ui.js`(공통 디자인 시스템)를 쓰고, 수정 후 `node --check` 로 스크립트 문법을 확인한다.
-- 탭 전환 셸(1.7.0, `ui.js` "탭 전환(셸)"): 다섯 화면은 별도 문서지만 탭 이동 때 새로 읽지 않는다 — 처음 연 화면이 바탕 문서, 나머지는 화면 전체를 덮는 `iframe.tabframe` 으로 한 번 띄운 뒤 보이기/숨기기만. 그래서 ① 화면 코드에서 탭 사이 이동은 `<a href="/x.html#…">`(자동 가로챔) 또는 `UI.nav(url)` 로 — `location.href` 로 옮기면 iframe 안에서만 이동한다. ② 주기 작업은 `UI.every` 또는 `UI.asleep()` 확인(가려진 탭은 쉰다, `document.hidden` 만 보면 안 됨). ③ 전체 새로고침은 `window.top.location.reload()`. ④ 한 창에 같은 `ui.js` 가 문서마다 따로 돈다(상단바도 문서마다 하나 — 테마는 `storage` 이벤트로 맞춘다). 화면 확인은 `~/AppData/Local/npm-cache/_npx/*/node_modules/playwright` + `ms-playwright/chromium-*/chrome.exe`(executablePath 지정) 헤드리스 스크립트로 가능(실측).
+- 탭 전환 셸(1.7.0, `ui.js` "탭 전환(셸)"): 여섯 화면은 별도 문서지만 탭 이동 때 새로 읽지 않는다 — 처음 연 화면이 바탕 문서, 나머지는 화면 전체를 덮는 `iframe.tabframe` 으로 한 번 띄운 뒤 보이기/숨기기만. 그래서 ① 화면 코드에서 탭 사이 이동은 `<a href="/x.html#…">`(자동 가로챔) 또는 `UI.nav(url)` 로 — `location.href` 로 옮기면 iframe 안에서만 이동한다. ② 주기 작업은 `UI.every` 또는 `UI.asleep()` 확인(가려진 탭은 쉰다, `document.hidden` 만 보면 안 됨). ③ 전체 새로고침은 `window.top.location.reload()`. ④ 한 창에 같은 `ui.js` 가 문서마다 따로 돈다(상단바도 문서마다 하나 — 테마는 `storage` 이벤트로 맞춘다). 화면 확인은 `~/AppData/Local/npm-cache/_npx/*/node_modules/playwright` + `ms-playwright/chromium-*/chrome.exe`(executablePath 지정) 헤드리스 스크립트로 가능(실측).
 - 에이전트 화면의 문서·Diff(1.12.0, `agent.html` 의 `md()`·`loadDiff()`): 서버가 주는 글(설계안·변경 요약·검증 보고·git diff)은 그대로 두고 **화면에서만** 구조를 입힌다 — 절(`#`·`##`)마다 카드(`.msec`, 「확인 필요」·「위험」·「수정 요청」은 강조), 들여쓴 목록은 중첩, `[OK]/[SKIP]/[FAIL]`·`PASS/FAIL`·첫 줄 `✅/❌` 는 배지, 「커밋 메시지」 절은 줄바꿈 그대로, 검증 보고의 리뷰어 절은 「독립 리뷰」 카드 안 소제목(`vmdc`). Diff 는 파일별 `<details>` 이고 **줄은 펼칠 때 그린다**(`dfFill`, 전체 400줄 이하면 처음부터 펼침) — 71개 파일·2,485줄 diff 가 처음엔 파일 목록만 DOM 에 있다. 프롬프트의 출력 틀(절 제목)을 바꾸면 이 강조 규칙도 본다. 새 클래스 이름은 `ui.css` 와 겹치지 않게(`.sec` 는 이미 사이드바 제목용 — 겹쳐서 카드가 가로로 깨진 적 있음). 리서치(`research.html`)·플랫폼 관리(`ui.js mtMd`)의 마크다운 변환기는 별개다.
 - 에이전트 화면 보기 설정(1.13.0, `agent.html` 의 `setFz`·`setFocus`·`dfTree`): 글자 크기는 `#main` 의 `--pz` 로 `.pane` 전체를 `zoom` 한다 — 그래서 **pane 안에서 `vh` 로 높이를 잡을 때는 `/ var(--pz, 1)` 로 나눈다**(안 나누면 크게 볼 때 화면을 넘는다). 집중 보기는 `body.focus`(Alt+W)로 사이드바·스테퍼·통계를 CSS 로만 숨긴다(확인 대기 `.act.wait` 는 남김). 둘 다 localStorage(`agent.fz`·`agent.focus`). Diff 파일 트리는 파일 4개 이상일 때만, 변경된 파일만 — 저장소 전체 탐색기는 작업 공간 탭(예정) 소관으로 미뤘다. 화면만 고쳤을 때는 정적 파일을 서빙하고 `/api` GET 만 실행 중인 앱으로 넘기는 작은 서버 + 헤드리스 Playwright 로 재시작 없이 확인할 수 있다(실측).
 - 다시 그리기: 주기 갱신으로 그리는 목록·문서는 `UI.set(el, html)`(내용이 같으면 건너뜀), 마크다운은 `UI.memo(md)`. 세션·스레드 전환은 `UI.swapOut/swapIn`.

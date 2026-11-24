@@ -74,8 +74,8 @@ window.UI = (() => {
   //  ② 플랫폼 알림 — 이슈 에이전트·질의·시스템이 서버에 남긴 것(GET /api/notifications, 1분마다).
   // 읽음·비우기 시각도 브라우저가 기억한다. 저장소를 못 쓰면 이 화면의 메모리에만 남는다.
   const NOTICE_KEY = 'da-notices', NOTICE_MAX = 100;
-  const PAGE_NAMES = { home: '홈', agent: '에이전트', research: '리서치', messenger: '메신저', platform: '플랫폼' };
-  const KIND_NAMES = { issue: '이슈 에이전트', research: '리서치', system: '시스템', maintain: '플랫폼 관리' };
+  const PAGE_NAMES = { home: '홈', agent: '에이전트', research: '리서치', workspace: '작업 공간', messenger: '메신저', platform: '플랫폼' };
+  const KIND_NAMES = { issue: '이슈 에이전트', research: '리서치', system: '시스템', maintain: '플랫폼 관리', workspace: '작업 공간' };
   let noticeMem = { seen: 0, cleared: 0, items: [] }, noticeSrv = [], noticePage = '', noticeFirst = true;
   function noticeLoad() {
     try { const d = JSON.parse(localStorage.getItem(NOTICE_KEY) || 'null'); if (d && Array.isArray(d.items)) noticeMem = { seen: d.seen || 0, cleared: d.cleared || 0, items: d.items }; } catch (_) {}
@@ -401,7 +401,7 @@ window.UI = (() => {
   // ---------- top bar ----------
   /**
    * 공통 상단바. active: 'home' | 'agent' | 'research' | 'messenger' | 'platform'. 두 페이지를 세그먼트 탭으로 오가며, 에이전트 상태 칩은 항상 노출(관리 페이지에서는 대시보드로 가는 링크).
-   * 단축키: Alt+1 홈, Alt+2 에이전트, Alt+3 리서치, Alt+4 메신저, Alt+5 플랫폼, Alt+T 테마, Alt+N 알림함, Alt+M 플랫폼 관리(채팅 창).
+   * 단축키: Alt+1 홈, Alt+2 에이전트, Alt+3 리서치, Alt+4 작업 공간, Alt+5 메신저, Alt+6 플랫폼, Alt+T 테마, Alt+N 알림함, Alt+M 플랫폼 관리(채팅 창).
    */
   function topbar(active, subtitle) {
     const el = $('topbar'); if (!el) return;
@@ -412,8 +412,9 @@ window.UI = (() => {
         <a href="/home.html" class="${active==='home'?'on':''}">${I.home}홈 <span class="k">Alt+1</span></a>
         <a href="/agent.html" class="${active==='agent'?'on':''}">${I.agent}에이전트 <span class="k">Alt+2</span></a>
         <a href="/research.html" class="${active==='research'?'on':''}">${I.search}리서치 <span class="k">Alt+3</span></a>
-        <a href="/messenger.html" class="${active==='messenger'?'on':''}">${I.rooms}메신저 <span class="k">Alt+4</span></a>
-        <a href="/platform.html" class="${active==='platform'?'on':''}">${I.branch}플랫폼 <span class="k">Alt+5</span></a>
+        <a href="/workspace.html" class="${active==='workspace'?'on':''}">${I.terminal.replace('width="16" height="16"', 'width="14" height="14"')}작업 공간 <span class="k">Alt+4</span></a>
+        <a href="/messenger.html" class="${active==='messenger'?'on':''}">${I.rooms}메신저 <span class="k">Alt+5</span></a>
+        <a href="/platform.html" class="${active==='platform'?'on':''}">${I.branch}플랫폼 <span class="k">Alt+6</span></a>
       </nav>
       <div class="strip" id="strip">
         <a class="chip" id="agentChip" href="/agent.html" title="에이전트 대시보드로 이동"><span class="dot"></span><span>에이전트 상태 확인 중…</span></a>
@@ -443,7 +444,7 @@ window.UI = (() => {
     loadVersion();
     document.addEventListener('keydown', e => {
       if (!e.altKey || e.ctrlKey || e.metaKey) return;
-      const go = { '1': '/home.html', '2': '/agent.html', '3': '/research.html', '4': '/messenger.html', '5': '/platform.html' }[e.key];
+      const go = { '1': '/home.html', '2': '/agent.html', '3': '/research.html', '4': '/workspace.html', '5': '/messenger.html', '6': '/platform.html' }[e.key];
       if (go) { e.preventDefault(); if (!nav(go)) location.href = go; } else if (e.key.toLowerCase() === 't') { toggleTheme(); } else if (e.key.toLowerCase() === 'n') { e.preventDefault(); noticeToggle(); } else if (e.key.toLowerCase() === 'm') { e.preventDefault(); maintOpen(); }
     });
   }
@@ -540,7 +541,7 @@ window.UI = (() => {
    * → 이동이 즉시 일어나고 각 탭의 선택·스크롤·실시간 로그가 그대로 남는다. 주소(경로·#)는 보이는 탭에 맞춰 바꾸므로
    * 새로고침·주소 복사는 예전과 같다. 가려진 탭은 UI.every 폴링을 쉰다(asleep). 탭 링크에 마우스를 올리면 미리 띄운다.
    */
-  const TABS = ['/home.html', '/agent.html', '/research.html', '/messenger.html', '/platform.html'];
+  const TABS = ['/home.html', '/agent.html', '/research.html', '/workspace.html', '/messenger.html', '/platform.html'];
   const embedded = (() => { try { return window.top !== window && !!window.top.UI && !!window.frameElement; } catch (_) { return false; } })();
   let inactive = embedded && window.frameElement.dataset.on !== '1';   // 이 문서가 다른 탭에 가려져 있는가
   function asleep() { return document.hidden || inactive; }
@@ -762,6 +763,6 @@ window.UI = (() => {
     return k => { let v = m.get(k); if (v === undefined) { if (m.size >= max) m.clear(); m.set(k, v = fn(k)); } return v; };
   }
 
-  const api = { $, esc, fmt, hhmm, ago, dur, num, KOR, cls, isActive, I, toast, every, asleep, go, nav, _active: setActive, _sync: sync, _warm: warm, set, memo, swapOut, swapIn, splitter, topbar, setAgentChip, pollAgentChip, toggleTheme, applyTheme, startUsageBattery, renderBattery, maintOpen };
+  const api = { $, esc, fmt, hhmm, ago, dur, num, KOR, cls, isActive, I, toast, every, asleep, go, nav, _active: setActive, _sync: sync, _warm: warm, set, memo, swapOut, swapIn, splitter, topbar, setAgentChip, pollAgentChip, toggleTheme, applyTheme, startUsageBattery, renderBattery, maintOpen, mdLite: mtMd };
   return api;
 })();

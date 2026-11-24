@@ -89,6 +89,7 @@ public class ClaudeCliAgent implements CodingAgent {
     static final String FALLBACK_MODEL = "opus";
     /** 플랫폼 관리 세션의 사용량 구분값(Overrides.source) 겸 스킬 단계 키. */
     static final String MAINTAIN_SOURCE = "maintain";
+    static final String WORKSPACE_SOURCE = "workspace";
 
     /** 해당 Claude 세션이 지금 실행 중이면 그 실행 정보, 아니면 null. */
     @Override
@@ -299,6 +300,9 @@ public class ClaudeCliAgent implements CodingAgent {
         boolean fixStage = stage == Stage.FIX;
         // 플랫폼 관리 세션(자기 저장소 유지보수): 대상 프로젝트용 프리뷰·운영 MCP 안내를 싣지 않고, 푸시는 화면 버튼의 몫이라 막는다
         boolean maintain = ov != null && MAINTAIN_SOURCE.equals(ov.source());
+        // 작업 공간 세션(사용자가 등록한 임의 폴더): 대상 프로젝트용 프리뷰 도구·안내·JDK 를 싣지 않는다. 운영 MCP 는 작업 공간 설정에 따른다
+        boolean workspace = ov != null && WORKSPACE_SOURCE.equals(ov.source());
+        boolean plain = maintain || workspace;
         List<String> cmd = new ArrayList<>();
         cmd.add(claude.warmCommand());                // claude.exe 직접 실행 (한글 인자 안전)
         cmd.add("-p");
@@ -312,6 +316,9 @@ public class ClaudeCliAgent implements CodingAgent {
         if (maintain) {
             cmd.add("Bash(git push:*)");
             cmd.add("Read(./.env)");                  // 비밀값 파일은 읽기 도구로도 열지 못하게(셸 우회까지 막지는 못한다 — 프롬프트로도 금지)
+        }
+        if (ov != null && ov.denyTools() != null) {
+            cmd.addAll(ov.denyTools());               // 호출별 금지 도구(읽기 전용 작업 공간의 편집 도구 등)
         }
         boolean subagents = settings.getAgentSubagents();
         boolean teams = settings.getAgentTeams();
@@ -359,11 +366,11 @@ public class ClaudeCliAgent implements CodingAgent {
             cmd.add("--max-turns");
             cmd.add(String.valueOf(maxTurns));
         }
-        boolean withMcp = mcp.agentEnabled() && !maintain;
+        boolean withMcp = mcp.agentEnabled() && !maintain && (ov == null || ov.opsMcp() == null || ov.opsMcp());
         boolean withPw = (fixStage || (stage == Stage.VERIFY && previewUp)) && shotsDir != null && mcp.playwrightEnabled();
         List<String> tools = new ArrayList<>(allowedTools == null ? List.of() : allowedTools);
         tools.addAll(docsTools());                    // 사내 문서 검색/읽기(curl → 봇 로컬 API)
-        if (!maintain) {
+        if (!plain) {
             tools.addAll(previewTools(stage));        // preview / jscheck / jspcheck 스크립트
         }
         Path mcpConfig = withPw ? mcp.configFor(shotsDir) : (withMcp ? mcp.configPath() : null);
@@ -386,13 +393,14 @@ public class ClaudeCliAgent implements CodingAgent {
         if (!dh.isEmpty()) {
             sys = (sys.isEmpty() ? "" : sys + "\n\n") + dh;
         }
-        // 플랫폼 스킬: 질의는 research, 플랫폼 관리는 maintain, 그 외는 단계(analyze/fix/verify)에 맞는 지침
+        // 플랫폼 스킬: 질의는 research, 플랫폼 관리는 maintain, 작업 공간은 workspace, 그 외는 단계(analyze/fix/verify)에 맞는 지침
         String skillNote = skills == null ? "" : skills.promptNote(
-                maintain ? MAINTAIN_SOURCE : ov != null && "research".equals(ov.source()) ? "research" : stage.name().toLowerCase(java.util.Locale.ROOT));
+                maintain ? MAINTAIN_SOURCE : workspace ? WORKSPACE_SOURCE
+                        : ov != null && "research".equals(ov.source()) ? "research" : stage.name().toLowerCase(java.util.Locale.ROOT));
         if (!skillNote.isEmpty()) {
             sys = (sys.isEmpty() ? "" : sys + "\n\n") + skillNote;
         }
-        if (fixStage && !maintain) {
+        if (fixStage && !plain) {
             String ph = previewHint(shotsDir);
             if (!ph.isEmpty()) {
                 sys = (sys.isEmpty() ? "" : sys + "\n\n") + ph;
@@ -443,7 +451,7 @@ public class ClaudeCliAgent implements CodingAgent {
                 if (java.nio.file.Files.exists(own.resolve("bin").resolve("javac.exe")) || java.nio.file.Files.exists(own.resolve("bin").resolve("javac"))) {
                     env.put("JAVA_HOME", own.toString());
                 }
-            } else if (preview != null && preview.enabled()) {
+            } else if (!workspace && preview != null && preview.enabled()) {   // 작업 공간은 사용자의 환경(JAVA_HOME 등)을 그대로 쓴다
                 env.put("JAVA_HOME", nz(preview.javaHome()));   // 대상 저장소(Java 21) 빌드용. 봇 자신은 JDK 17 로 돌지만 자식은 프리뷰 JDK
                 env.put("PREVIEW_JAVA_HOME", nz(preview.javaHome()));
                 env.put("PREVIEW_CATALINA_HOME", nz(preview.catalinaHome()));

@@ -45,8 +45,16 @@ public interface CodingAgent {
     record RunInfo(String model, String effort, Stage stage, long startedAt) {
     }
 
-    /** 호출별 재정의: 모델/노력은 비우면 단계 설정값, 상한/턴은 0 이면 단계 기본값, source 는 사용량 기록 구분(null → "agent"). */
-    record Overrides(String model, String effort, long timeoutMs, int maxTurns, String source) {
+    /**
+     * 호출별 재정의: 모델/노력은 비우면 단계 설정값, 상한/턴은 0 이면 단계 기본값, source 는 사용량 기록 구분(null → "agent").
+     * {@code opsMcp} 는 운영 MCP 도구를 실을지(null = 구현체 기본), {@code denyTools} 는 이 호출에서 추가로 금지할 도구
+     * (편집 자동 승인 모드에서는 허용 목록에 없어도 편집이 되므로, 읽기 전용 호출은 여기로 막는다).
+     */
+    record Overrides(String model, String effort, long timeoutMs, int maxTurns, String source, Boolean opsMcp, List<String> denyTools) {
+
+        public Overrides(String model, String effort, long timeoutMs, int maxTurns, String source) {
+            this(model, effort, timeoutMs, maxTurns, source, null, null);
+        }
     }
 
     record Result(String text, String sessionId, boolean error, double costUsd, int turns, int toolCalls,

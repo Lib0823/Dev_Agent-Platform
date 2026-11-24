@@ -12,8 +12,8 @@ import java.util.Locale;
  */
 public class AgentSkill {
 
-    /** 적용 단계 키: analyze(이슈 분석·설계) / fix(코드 수정) / verify(독립 리뷰) / research(질의) / maintain(플랫폼 관리 세션). */
-    public static final List<String> STAGES = List.of("analyze", "fix", "verify", "research", "maintain");
+    /** 적용 단계 키: analyze(이슈 분석·설계) / fix(코드 수정) / verify(독립 리뷰) / research(질의) / maintain(플랫폼 관리 세션) / workspace(작업 공간 대화). */
+    public static final List<String> STAGES = List.of("analyze", "fix", "verify", "research", "maintain", "workspace");
 
     private String name;
     private String description;

@@ -190,6 +190,39 @@ CREATE TABLE IF NOT EXISTS maintain_turn (
 CREATE INDEX IF NOT EXISTS idx_maintain_turn_thread ON maintain_turn (thread_id, id);
 -- 플랫폼 관리 이벤트도 issue_event 를 공유하며 session_id = 2000000000 + maintain_turn.id
 
+-- 작업 공간: 사용자가 등록한 로컬 폴더. 이 폴더를 작업 디렉터리로 한 Claude 세션과 대화하며 일한다(이슈 없이 바로)
+CREATE TABLE IF NOT EXISTS workspace (
+    id          BIGSERIAL    PRIMARY KEY,
+    name        VARCHAR(80)  NOT NULL,
+    path        TEXT         NOT NULL,                   -- 실제 경로(절대)
+    mode        VARCHAR(8)   NOT NULL DEFAULT 'full',    -- 권한: read(읽기만) / edit(파일 편집) / full(편집 + 명령 실행)
+    ops_mcp     BOOLEAN      NOT NULL DEFAULT false,     -- 운영 MCP(읽기 전용 도구)를 세션에 실을지
+    created_at  TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ  NOT NULL DEFAULT now()
+);
+-- 작업 공간 대화: 요청 1건 = 1행. 같은 대화(thread_id = 첫 행의 id)는 Claude 세션 하나를 --resume 으로 이어간다
+CREATE TABLE IF NOT EXISTS workspace_turn (
+    id                 BIGSERIAL    PRIMARY KEY,
+    workspace_id       BIGINT       NOT NULL,
+    thread_id          BIGINT       NOT NULL DEFAULT 0,
+    question           TEXT         NOT NULL,
+    answer_md          TEXT,                             -- 답변(마크다운)
+    state              VARCHAR(16)  NOT NULL,            -- NEW/RUNNING/DONE/FAILED/ABORTED
+    claude_session_id  TEXT,
+    model              VARCHAR(32),                      -- NULL 이면 에이전트 설정의 '개발' 모델
+    last_error         TEXT,
+    turns              INT          NOT NULL DEFAULT 0,
+    input_tokens       BIGINT       NOT NULL DEFAULT 0,
+    output_tokens      BIGINT       NOT NULL DEFAULT 0,
+    elapsed_ms         BIGINT       NOT NULL DEFAULT 0,
+    created_at         TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    started_at         TIMESTAMPTZ,
+    finished_at        TIMESTAMPTZ,
+    updated_at         TIMESTAMPTZ  NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_workspace_turn_thread ON workspace_turn (workspace_id, thread_id, id);
+-- 작업 공간 이벤트도 issue_event 를 공유하며 session_id = 3000000000 + workspace_turn.id
+
 -- 관리 페이지에서 등록한 사용자 정의 MCP 서버(내장 opensearch/postgres/k3s-ops 와 함께 work/mcp-servers.json 에 합쳐진다). 비밀값은 ${ENV} 자리표시자만.
 CREATE TABLE IF NOT EXISTS mcp_server (
     name         VARCHAR(32)  PRIMARY KEY,                -- 도구 접두어 mcp__<name>__
