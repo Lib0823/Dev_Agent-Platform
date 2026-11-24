@@ -120,8 +120,12 @@
   .errbox { margin-top: 14px; white-space: pre-wrap; }
   .tabrow { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
   .tabrow .sp { flex: 1; }
-  .seg.fz .tab { padding: 0 10px; } .seg.fz .tab[data-z="m"] { font-size: 14.5px; } .seg.fz .tab[data-z="l"] { font-size: 16.5px; }
-  #btnFocus.on { border-color: color-mix(in srgb, var(--accent) 55%, transparent); color: var(--text); }
+  /* 보기 도구: 글자 작게·크게 | 집중 보기 — 아이콘만, 설명은 툴팁 */
+  .seg.vtools { flex-wrap: nowrap; align-items: center; }
+  .seg.vtools .tab { width: 32px; padding: 0; justify-content: center; font-size: 12.5px; font-weight: 600; letter-spacing: -.02em; }
+  .seg.vtools .tab:disabled { opacity: .32; cursor: default; }
+  .seg.vtools .tab.on { background: var(--surface); color: var(--accent); box-shadow: 0 1px 2px rgba(0,0,0,.25); }
+  .seg.vtools .vsep { width: 1px; height: 16px; background: var(--line2); margin: 0 3px; }
 
   /* ---------- 보기 설정(1.13.0): 글자 크기 = 탭 본문 전체 확대(--pz), 집중 보기 = 사이드바·제목 부속·스테퍼를 접고 본문만 ---------- */
   .pane { zoom: var(--pz, 1); }
@@ -335,12 +339,12 @@
             <button class="tab" data-p="tl">타임라인 <span class="cnt" id="cntTl">0</span></button>
           </div>
           <span class="sp"></span>
-          <div class="seg fz" title="글자 크기(로그·문서·Diff)">
-            <button class="tab" data-z="s" onclick="setFz('s')">가</button>
-            <button class="tab" data-z="m" onclick="setFz('m')">가</button>
-            <button class="tab" data-z="l" onclick="setFz('l')">가</button>
+          <div class="seg vtools">
+            <button class="tab" id="fzDown" onclick="setFz(fzIdx - 1)">A−</button>
+            <button class="tab" id="fzUp" onclick="setFz(fzIdx + 1)">A+</button>
+            <span class="vsep"></span>
+            <button class="tab" id="btnFocus" onclick="setFocus()"></button>
           </div>
-          <button class="btn sm" id="btnFocus" onclick="setFocus()" title="사이드바·진행 단계를 접고 본문만 넓게 봅니다 (Alt+W)"></button>
         </div>
 
         <div class="pane sel" id="p-log">
@@ -999,22 +1003,28 @@ function dfFilter(q) {
 }
 
 // ---------------------------------------------------------------- 보기 설정: 글자 크기 · 집중 보기 (브라우저에 기억)
-const FZ = { s: 1, m: 1.1, l: 1.22 };
-function setFz(k) {
-  if (!FZ[k]) k = 's';
-  $('main').style.setProperty('--pz', FZ[k]);
-  document.querySelectorAll('.fz .tab').forEach(b => b.classList.toggle('sel', b.dataset.z === k));
-  try { localStorage.setItem('agent.fz', k); } catch(e) {}
+const FZ = [1, 1.1, 1.22, 1.35];
+const IC_WIDE = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>';
+const IC_NARROW = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>';
+let fzIdx = 0;
+function setFz(i) {
+  fzIdx = i = Math.max(0, Math.min(FZ.length - 1, Number(i) || 0));
+  $('main').style.setProperty('--pz', FZ[i]);
+  const pct = Math.round(FZ[i] * 100) + '%';
+  $('fzDown').disabled = i === 0; $('fzUp').disabled = i === FZ.length - 1;
+  $('fzDown').title = `글자 작게 (지금 ${pct})`; $('fzUp').title = `글자 크게 (지금 ${pct})`;
+  try { localStorage.setItem('agent.fz', i); } catch(e) {}
 }
 function setFocus(on) {
   if (on == null) on = !document.body.classList.contains('focus');
   document.body.classList.toggle('focus', on);
-  const b = $('btnFocus'); b.classList.toggle('on', on); b.innerHTML = (on ? '기본 보기' : '집중 보기') + ' <span class="kbd">Alt+W</span>';
+  const b = $('btnFocus'); b.classList.toggle('on', on); b.innerHTML = on ? IC_NARROW : IC_WIDE;
+  b.title = on ? '기본 보기로 돌아갑니다 (Alt+W)' : '집중 보기: 세션 목록·진행 단계를 접고 본문만 넓게 (Alt+W)';
   try { localStorage.setItem('agent.focus', on ? '1' : ''); } catch(e) {}
   if (currentPane() === 'log' && $('follow').checked) { const l = $('log'); l.scrollTop = l.scrollHeight; }
 }
 document.addEventListener('keydown', e => { if (e.altKey && !e.ctrlKey && !e.metaKey && e.key.toLowerCase() === 'w') { e.preventDefault(); setFocus(); } });
-{ let z = 's', f = false; try { z = localStorage.getItem('agent.fz') || 's'; f = !!localStorage.getItem('agent.focus'); } catch(e) {} setFz(z); setFocus(f); }
+{ let z = 0, f = false; try { z = localStorage.getItem('agent.fz'); z = { s: 0, m: 1, l: 2 }[z] ?? z; f = !!localStorage.getItem('agent.focus'); } catch(e) {} setFz(z); setFocus(f); }
 
 // ---------------------------------------------------------------- tabs
 document.querySelectorAll('.tabs .tab').forEach(t => t.addEventListener('click', () => {
