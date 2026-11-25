@@ -8,6 +8,7 @@ import io.github.lib0823.devagent.gitlab.IssueEvent;
 import io.github.lib0823.devagent.gitlab.IssueEventBus;
 import io.github.lib0823.devagent.llm.UsageService;
 import io.github.lib0823.devagent.mcp.McpConfigService;
+import io.github.lib0823.devagent.messenger.MessengerService;
 import io.github.lib0823.devagent.notify.NotificationService;
 import io.github.lib0823.devagent.skill.AgentSkill;
 import io.github.lib0823.devagent.skill.SkillService;
@@ -88,9 +89,19 @@ public class WorkspaceService {
     /** 실행 직전의 폴더 스냅샷(차례 id → 경로별 수정 시각·크기). 끝날 때 비교해 바뀐 파일을 남긴다. */
     private final Map<Long, Map<String, long[]>> snapshots = new ConcurrentHashMap<>();
 
+    /** 차례별 되돌리기 지점(바뀐 파일의 요청 전·후 내용). */
+    private final WorkspaceCheckpoints checkpoints;
+    /** 되돌리기 지점을 준비한 차례(사본을 맞추는 데 성공한 것만 끝날 때 떼어 둔다). */
+    private final Set<Long> checkpointed = ConcurrentHashMap.newKeySet();
+    private final MessengerService messenger;
+
     public WorkspaceService(WorkspaceProperties props, WorkspaceMapper mapper, CodingAgent agent, IssueEventBus events,
                             SettingService settings, UsageService usage, NotificationService notifications, McpConfigService mcp,
-                            SkillService skills, WorkspaceApprovals approvals, @Value("${server.port:8777}") int adminPort) {
+                            SkillService skills, WorkspaceApprovals approvals, MessengerService messenger,
+                            @Value("${server.port:8777}") int adminPort, @Value("${gitlab.work-dir:work}") String workDir) {
+        this.messenger = messenger;
+        this.checkpoints = new WorkspaceCheckpoints(Path.of(workDir == null || workDir.isBlank() ? "work" : workDir.strip())
+                .toAbsolutePath().resolve("workspace-ckpt"));
         this.skills = skills;
         this.approvals = approvals;
         this.adminPort = adminPort;
@@ -122,6 +133,8 @@ public class WorkspaceService {
         mapper.ensureChangedColumn();
         mapper.ensureSkillsColumn();
         mapper.migrateModes();
+        mapper.ensureOriginColumn();
+        mapper.ensureRevertedColumn();
         events.ensureTable();                        // GitLab 이 꺼져 있어도 이벤트 테이블은 필요하다(멱등)
         // 재기동 시 진행 중이던 요청: 중간 상태를 알 수 없으므로 실패로 닫는다. 폴더의 변경과 세션은 남아 있어 이어서 요청할 수 있다
         for (WorkspaceTurn t : mapper.findActive()) {
@@ -212,6 +225,15 @@ public class WorkspaceService {
                 notifications.add(SOURCE, "warn", ws.getName() + " 확인 필요: " + tool + (sum.isEmpty() ? "" : " " + abbreviate(sum, 60)),
                         "실행 전 확인을 기다리고 있습니다. 답이 없으면 40분 뒤 거부로 처리됩니다.",
                         "/workspace.html#w=" + ws.getId() + "&t=" + turn.getThreadId());
+            }
+            // 메신저로 시킨 일이면 확인도 메신저로 묻는다(확인마다 — 답해야 다음으로 넘어간다)
+            if (ws != null && ORIGIN_MESSENGER.equals(turn.getOrigin())) {
+                try {
+                    messenger.notifySelf(MessengerService.NOTICE_WORKSPACE, PFX + ws.getName() + " 실행 전 확인: " + tool
+                            + (sum.isEmpty() ? "" : "\n" + abbreviate(sum, 400)) + "\n→ @AI 작업 허용  /  @AI 작업 거부 <이유>  (40분 안에 답이 없으면 거부)");
+                } catch (RuntimeException e) {
+                    log.warn("확인 요청 메신저 알림 실패: {}", e.toString());
+                }
             }
         }
         WorkspaceApprovals.Decision d = approvals.await(token, tool, sum, detail(tool, input), ASK_WAIT_MS);
@@ -422,6 +444,7 @@ public class WorkspaceService {
         }
         mapper.deleteTurns(id);
         mapper.deleteWorkspace(id);
+        checkpoints.drop(id);                         // 되돌리기 지점(파일 사본)도 남기지 않는다
         log.info("작업 공간 등록 해제 #{} {}", id, w.getName());
         return "「" + w.getName() + "」 등록을 해제했습니다. 폴더와 파일은 그대로 있습니다.";
     }
@@ -439,6 +462,11 @@ public class WorkspaceService {
      * 검증 실패는 IllegalArgumentException(메시지를 그대로 사용자에게).
      */
     public synchronized WorkspaceTurn submit(long workspaceId, String question, Long threadId, String model) {
+        return submit(workspaceId, question, threadId, model, null);
+    }
+
+    /** {@code origin} = 접수 경로({@link #ORIGIN_MESSENGER} 면 끝났을 때·확인이 필요할 때 메신저로 알린다, 화면은 null). */
+    public synchronized WorkspaceTurn submit(long workspaceId, String question, Long threadId, String model, String origin) {
         requireEnabled();
         Workspace w = mapper.findWorkspace(workspaceId);
         if (w == null) {
@@ -474,6 +502,7 @@ public class WorkspaceService {
         t.setState(WorkspaceTurn.NEW);
         t.setModel(normalizeModel(model));
         t.setThreadId(thread);
+        t.setOrigin(origin);
         mapper.insert(t);
         if (thread == 0) {
             mapper.fixThread(t.getId());
@@ -542,6 +571,7 @@ public class WorkspaceService {
             approvals.close(id);                      // 남은 확인 대기는 거부로 닫는다
             askNotified.remove(id);
             snapshots.remove(id);                     // finish 를 거치지 않고 끝난 경우에도 스냅샷을 남기지 않는다
+            checkpointed.remove(id);
             Path askFile = askFiles.remove(id);
             if (askFile != null) {
                 try {
@@ -575,6 +605,22 @@ public class WorkspaceService {
         Map<String, long[]> before = WorkspaceFiles.snapshot(dir);
         if (before != null) {
             snapshots.put(t.getId(), before);
+            // 되돌리기 지점: 폴더의 사본을 지금 상태와 맞춰 둔다(달라진 파일만 복사 — 처음 한 번만 오래 걸린다). 큰 폴더는 건너뛴다
+            long t0 = System.currentTimeMillis();
+            if (checkpoints.sync(w.getId(), dir, before)) {
+                checkpointed.add(t.getId());
+                long ms = System.currentTimeMillis() - t0;
+                if (ms > 3000) {
+                    events.emit(eid, IssueEvent.INFO, "되돌리기 지점 준비 " + ms / 1000 + "초(파일 " + before.size() + "개)");
+                }
+            }
+        }
+        // 화면에서 앞선 요청의 변경을 되돌렸으면 세션은 그 사실을 모른다 — 이번 요청 앞에 알려 준다
+        String question = t.getQuestion();
+        List<String> undone = revertedSince(t);
+        if (!undone.isEmpty()) {
+            question = "(참고: 사용자가 화면에서 앞선 요청의 파일 변경을 요청 전 상태로 되돌렸습니다 — " + String.join(" / ", undone)
+                    + ". 기억하고 있는 파일 내용이 지금과 다를 수 있으니 필요한 파일은 다시 읽고 진행하세요.)\n\n" + question;
         }
         long bashMin = Math.max(10, Math.min(50, (props.timeoutOr() - 60_000L) / 60_000L));
         String sys = WorkspacePrompts.system(w, dir, bashMin);
@@ -607,7 +653,7 @@ public class WorkspaceService {
         try {
             CodingAgent.Result r;
             try {
-                r = agent.run(dir, sid, resume, tools, sys, t.getQuestion(), listener, null, CodingAgent.Stage.FIX, false, ov);
+                r = agent.run(dir, sid, resume, tools, sys, question, listener, null, CodingAgent.Stage.FIX, false, ov);
             } catch (CodingAgent.UsageLimitException | CodingAgent.AgentTimeoutException e) {
                 throw e;
             } catch (RuntimeException e) {
@@ -619,7 +665,7 @@ public class WorkspaceService {
                 t.setClaudeSessionId(sid);
                 mapper.update(t);
                 events.emit(eid, IssueEvent.INFO, "이전 대화 세션을 찾지 못해 새 세션으로 시작합니다(앞선 대화 맥락 없음)");
-                r = agent.run(dir, sid, false, tools, sys, t.getQuestion(), listener, null, CodingAgent.Stage.FIX, false, ov);
+                r = agent.run(dir, sid, false, tools, sys, question, listener, null, CodingAgent.Stage.FIX, false, ov);
             }
             t.setTurns(r.turns());
             t.setInputTokens(r.inputTotal());
@@ -668,9 +714,17 @@ public class WorkspaceService {
         t.setFinishedAt(OffsetDateTime.now());
         // 이번 차례에 바뀐 파일: 실행 직전 스냅샷과 지금을 비교(셸로 바꾼 것도 잡힌다). 실패·중단이어도 남긴다
         Map<String, long[]> before = snapshots.remove(t.getId());
+        int changedCount = 0;
         if (before != null && w != null) {
-            List<String> ch = WorkspaceFiles.changes(before, WorkspaceFiles.snapshot(Path.of(w.getPath())));
+            Path root = Path.of(w.getPath());
+            Map<String, long[]> after = WorkspaceFiles.snapshot(root);
+            List<String> ch = WorkspaceFiles.changes(before, after);
             t.setChanged(ch.isEmpty() ? null : String.join("\n", ch));
+            changedCount = ch.size();
+            if (!ch.isEmpty() && checkpointed.remove(t.getId())) {
+                // 바뀐 파일의 요청 전·후 내용을 떼어 둔다(그 차례의 변경분 보기·되돌리기). 목록은 잘리지 않은 전체로
+                checkpoints.capture(w.getId(), t.getId(), root, WorkspaceFiles.changes(before, after, Integer.MAX_VALUE));
+            }
         }
         mapper.update(t);
         long eid = eventId(t.getId());
@@ -684,6 +738,258 @@ public class WorkspaceService {
         notifications.add(SOURCE, done ? "ok" : aborted ? "warn" : "err",
                 (w == null ? "작업 공간" : w.getName()) + " " + (done ? "완료" : aborted ? "중단" : "실패") + ": " + abbreviate(t.getQuestion(), 80),
                 error, "/workspace.html#w=" + t.getWorkspaceId() + "&t=" + t.getThreadId());
+        // 메신저로 들어온 요청은 답도 메신저로(자리를 비운 채 시킨 일의 결과). 길면 앞부분만 — 전체는 화면에
+        if (ORIGIN_MESSENGER.equals(t.getOrigin())) {
+            try {
+                messenger.notifySelf(MessengerService.NOTICE_WORKSPACE, messengerResult(t, w, changedCount));
+            } catch (RuntimeException e) {
+                log.warn("작업 공간 요청 #{} 메신저 알림 실패: {}", t.getId(), e.toString());
+            }
+        }
+    }
+
+    /** 메신저로 보내는 결과 글: 상태 한 줄 + 답변 앞부분 + 화면 주소. */
+    String messengerResult(WorkspaceTurn t, Workspace w, int changedCount) {
+        boolean done = WorkspaceTurn.DONE.equals(t.getState());
+        StringBuilder sb = new StringBuilder(PFX).append(w == null ? "작업 공간" : w.getName()).append(' ')
+                .append(done ? "완료" : WorkspaceTurn.ABORTED.equals(t.getState()) ? "중단" : "실패");
+        if (t.getElapsedMs() > 0) {
+            sb.append(" · ").append(Math.max(1, t.getElapsedMs() / 60_000)).append("분");
+        }
+        if (changedCount > 0) {
+            sb.append(" · 바뀐 파일 ").append(changedCount);
+        }
+        if (t.getLastError() != null && !t.getLastError().isBlank()) {
+            sb.append("\n").append(abbreviate(t.getLastError(), 300));
+        }
+        if (t.getAnswerMd() != null && !t.getAnswerMd().isBlank()) {
+            sb.append("\n\n").append(abbreviate(t.getAnswerMd(), MESSENGER_ANSWER_CHARS));
+        }
+        sb.append("\n\n전체: http://localhost:").append(adminPort).append("/workspace.html#w=").append(t.getWorkspaceId()).append("&t=").append(t.getThreadId());
+        return sb.toString();
+    }
+
+    // ---------------------------------------------------------------- 메신저 명령(@AI 작업 …): 자리를 비운 채 작업 공간에 일을 시킨다
+
+    public static final String ORIGIN_MESSENGER = "messenger";
+    /** 메신저로 보내는 글의 접두어(수집에서 봇이 보낸 글로 걸러진다 — 바꾸면 ChatMessageMapper·CollectService 도). */
+    public static final String PFX = "[작업] ";
+    private static final int MESSENGER_ANSWER_CHARS = 1800;
+    private static final String USAGE = """
+            사용법
+            · @AI 작업 <작업 공간>: <요청> — 그 작업 공간의 마지막 대화에 이어서 요청(작업 공간이 하나면 이름 생략 가능)
+            · @AI 새작업 <작업 공간>: <요청> — 새 대화로 요청
+            · @AI 작업 상태 — 진행 중인 요청과 실행 전 확인 대기
+            · @AI 작업 허용 / @AI 작업 거부 <이유> — 가장 오래 기다린 실행 전 확인에 답하기
+            · @AI 작업 중단 [작업 공간] — 진행 중인 요청 중단""";
+
+    /**
+     * 메신저 명령 처리(자기방에서만 불린다). {@code text} 는 "작업"/"새작업" 뒤의 글, {@code fresh} 는 새 대화로 시작할지.
+     * 돌려주는 글을 그대로 자기방에 답한다.
+     */
+    public String messengerCommand(String text, boolean fresh) {
+        if (!enabled()) {
+            return "작업 공간이 꺼져 있습니다.";
+        }
+        String t = text == null ? "" : text.strip();
+        List<Workspace> all = mapper.workspaces();
+        if (t.isEmpty() || t.equals("목록") || t.equals("도움말")) {
+            return (all.isEmpty() ? "등록된 작업 공간이 없습니다. 화면의 「작업 공간」 탭에서 폴더를 등록하세요."
+                    : "작업 공간: " + String.join(", ", all.stream().map(Workspace::getName).toList())) + "\n" + USAGE;
+        }
+        if (t.equals("상태")) {
+            return messengerStatus();
+        }
+        if (t.equals("허용") || t.equals("거부") || t.startsWith("거부 ")) {
+            boolean allow = t.equals("허용");
+            WorkspaceApprovals.Pending p = approvals.oldest();
+            if (p == null) {
+                return "기다리는 실행 전 확인이 없습니다.";
+            }
+            String why = allow ? null : t.substring(2).strip();
+            approvals.decide(p.id(), allow, false, why);
+            int left = approvals.waitingTurns().values().stream().mapToInt(Integer::intValue).sum();
+            return (allow ? "허용했습니다 — " : "거부했습니다 — ") + p.tool() + (p.summary().isEmpty() ? "" : ": " + abbreviate(p.summary(), 120))
+                    + (left > 0 ? "\n아직 " + left + "건이 더 기다립니다(@AI 작업 상태)." : "");
+        }
+        if (t.equals("중단") || t.startsWith("중단 ")) {
+            List<WorkspaceTurn> active = mapper.findActive();
+            String name = t.substring(2).strip();
+            if (!name.isEmpty()) {
+                Workspace w = match(all, name);
+                active = w == null ? List.of() : active.stream().filter(x -> x.getWorkspaceId() == w.getId()).toList();
+            }
+            if (active.isEmpty()) {
+                return "진행 중인 요청이 없습니다.";
+            }
+            if (active.size() > 1) {
+                return "진행 중인 요청이 " + active.size() + "건입니다. 작업 공간을 적어 주세요: @AI 작업 중단 <작업 공간>";
+            }
+            return abort(active.get(0).getId());
+        }
+        int colon = indexOfColon(t);
+        Workspace w;
+        String q;
+        if (colon < 0) {
+            if (all.size() != 1) {
+                return "어느 작업 공간인지 적어 주세요: @AI 작업 <작업 공간>: <요청>\n작업 공간: "
+                        + String.join(", ", all.stream().map(Workspace::getName).toList());
+            }
+            w = all.get(0);
+            q = t;
+        } else {
+            String name = t.substring(0, colon).strip();
+            q = t.substring(colon + 1).strip();
+            w = name.isEmpty() && all.size() == 1 ? all.get(0) : match(all, name);
+            if (w == null && all.size() == 1) {       // 이름이 아니라 요청 글 안의 콜론이었다
+                w = all.get(0);
+                q = t;
+            }
+            if (w == null) {
+                return "작업 공간을 찾을 수 없습니다: " + name + "\n작업 공간: " + String.join(", ", all.stream().map(Workspace::getName).toList());
+            }
+        }
+        if (q.isEmpty()) {
+            return USAGE;
+        }
+        try {
+            Long thread = fresh ? null : mapper.lastThread(w.getId());
+            WorkspaceTurn turn = submit(w.getId(), q, thread, null, ORIGIN_MESSENGER);
+            return "「" + w.getName() + "」 접수 (" + (thread == null ? "새 대화" : "이어서") + " · " + (Workspace.ASK.equals(w.getMode())
+                    ? "확인 후 실행 — 실행 전 확인이 필요하면 여기로 묻습니다" : "바로 실행") + "). 끝나면 알려 드립니다.\n진행: http://localhost:"
+                    + adminPort + "/workspace.html#w=" + w.getId() + "&t=" + turn.getThreadId();
+        } catch (IllegalArgumentException e) {
+            return e.getMessage();
+        }
+    }
+
+    private String messengerStatus() {
+        List<WorkspaceTurn> active = mapper.findActive();
+        if (active.isEmpty()) {
+            return "진행 중인 요청이 없습니다.";
+        }
+        StringBuilder sb = new StringBuilder();
+        for (WorkspaceTurn a : active) {
+            Workspace w = mapper.findWorkspace(a.getWorkspaceId());
+            sb.append(sb.length() > 0 ? "\n" : "").append("· ").append(w == null ? "#" + a.getWorkspaceId() : w.getName()).append(" — ")
+                    .append(WorkspaceTurn.NEW.equals(a.getState()) ? "대기" : "작업 중").append(": ").append(abbreviate(a.getQuestion(), 60));
+            for (WorkspaceApprovals.Pending p : approvals.pending(a.getId())) {
+                sb.append("\n   확인 대기 ").append(p.tool()).append(p.summary().isEmpty() ? "" : ": " + abbreviate(p.summary(), 100));
+            }
+        }
+        return sb.toString();
+    }
+
+    /** 요청 글에서 작업 공간 이름과 요청을 가르는 첫 콜론(반각·전각). 주소의 "://"와 드라이브 문자("C:\")는 건너뛴다. */
+    static int indexOfColon(String t) {
+        for (int i = 0; i < t.length(); i++) {
+            char c = t.charAt(i);
+            if (c == '：') {
+                return i;
+            }
+            if (c == ':') {
+                boolean url = t.startsWith("://", i);
+                boolean drive = i == 1 && i + 1 < t.length() && (t.charAt(2) == '\\' || t.charAt(2) == '/');
+                if (!url && !drive) {
+                    return i;
+                }
+                if (url) {
+                    return -1;                        // 이름 자리에 주소가 왔다: 이름 지정이 없는 요청으로 본다
+                }
+            }
+        }
+        return -1;
+    }
+
+    /** 이름으로 작업 공간 찾기: 정확히 같은 이름 → 그 글자로 시작하는 유일한 것 → 그 글자를 포함하는 유일한 것. */
+    static Workspace match(List<Workspace> all, String name) {
+        String n = name == null ? "" : name.strip().toLowerCase(Locale.ROOT);
+        if (n.isEmpty()) {
+            return null;
+        }
+        for (Workspace w : all) {
+            if (w.getName().toLowerCase(Locale.ROOT).equals(n)) {
+                return w;
+            }
+        }
+        List<Workspace> pre = all.stream().filter(w -> w.getName().toLowerCase(Locale.ROOT).startsWith(n)).toList();
+        if (pre.size() == 1) {
+            return pre.get(0);
+        }
+        List<Workspace> has = all.stream().filter(w -> w.getName().toLowerCase(Locale.ROOT).contains(n)).toList();
+        return has.size() == 1 ? has.get(0) : null;
+    }
+
+    // ---------------------------------------------------------------- 차례별 되돌리기
+
+    /** 이 대화에서, 세션이 마지막으로 돈 뒤에 사용자가 되돌린 차례들(요청 앞부분). 세션에 알려 줄 것이 없으면 빈 목록. */
+    private List<String> revertedSince(WorkspaceTurn t) {
+        List<WorkspaceTurn> thread = mapper.findThread(t.getThreadId());
+        OffsetDateTime lastRun = null;
+        for (WorkspaceTurn x : thread) {
+            if (x.getId() < t.getId() && x.getFinishedAt() != null) {
+                lastRun = x.getFinishedAt();
+            }
+        }
+        List<String> out = new ArrayList<>();
+        for (WorkspaceTurn x : thread) {
+            if (x.getId() < t.getId() && x.getRevertedAt() != null && lastRun != null && !x.getRevertedAt().isBefore(lastRun)) {
+                out.add("「" + abbreviate(x.getQuestion(), 60) + "」");
+            }
+        }
+        return out;
+    }
+
+    /**
+     * 그 차례가 바꾼 파일을 요청 전 상태로 되돌린다(그 차례가 남긴 상태 그대로인 파일만 — 이후에 또 바뀐 파일은 건너뛴다).
+     * 그 작업 공간에서 요청을 처리하는 중에는 하지 않는다.
+     */
+    public synchronized String revert(long turnId) {
+        requireEnabled();
+        WorkspaceTurn t = mapper.find(turnId);
+        if (t == null) {
+            throw new IllegalArgumentException("요청을 찾을 수 없습니다: #" + turnId);
+        }
+        if (!mapper.findActiveIn(t.getWorkspaceId()).isEmpty()) {
+            throw new IllegalArgumentException("이 작업 공간에서 요청을 처리하는 중입니다. 끝난 뒤 되돌리세요.");
+        }
+        Path root = root(t.getWorkspaceId());
+        WorkspaceCheckpoints.Reverted r = checkpoints.revert(t.getWorkspaceId(), turnId, root);
+        if (!r.restored().isEmpty()) {
+            mapper.markReverted(turnId);
+        }
+        events.emit(eventId(turnId), IssueEvent.INFO, "되돌리기 — " + r.restored().size() + "개 되돌림, " + r.skipped().size() + "개 건너뜀");
+        log.info("작업 공간 요청 #{} 되돌리기: {}개 되돌림, {}개 건너뜀", turnId, r.restored().size(), r.skipped().size());
+        StringBuilder sb = new StringBuilder(r.restored().isEmpty() ? "되돌린 파일이 없습니다." : "파일 " + r.restored().size() + "개를 요청 전 상태로 되돌렸습니다.");
+        if (!r.skipped().isEmpty()) {
+            sb.append("\n건너뜀 ").append(r.skipped().size()).append("개: ")
+                    .append(String.join(", ", r.skipped().size() > 5 ? r.skipped().subList(0, 5) : r.skipped()))
+                    .append(r.skipped().size() > 5 ? " …" : "");
+        }
+        return sb.toString();
+    }
+
+    /** 그 차례에서 이 파일이 바뀐 내용(요청 전 → 요청 후). 되돌리기 지점이 없으면 error. */
+    public Map<String, Object> turnDiff(long turnId, String path) {
+        requireEnabled();
+        WorkspaceTurn t = mapper.find(turnId);
+        Path[] sides = t == null ? null : checkpoints.sides(t.getWorkspaceId(), turnId, path == null ? "" : path.strip().replace('\\', '/'));
+        if (sides == null) {
+            throw new IllegalArgumentException("이 요청에서 바뀐 내용을 보관하고 있지 않습니다(오래되었거나 큰 폴더).");
+        }
+        if (sides[0] == null && sides[1] == null) {
+            throw new IllegalArgumentException("큰 파일이라 내용을 보관하지 않았습니다.");
+        }
+        Map<String, Object> out = WorkspaceFiles.fileDiff(sides[0], sides[1]);
+        out.put("path", path);
+        out.put("turn", turnId);
+        out.put("kind", sides[0] == null ? "A" : sides[1] == null ? "D" : "M");
+        return out;
+    }
+
+    /** 폴더 전체의 파일 경로(화면의 「파일 찾기」용). */
+    public Map<String, Object> names(long workspaceId) {
+        return WorkspaceFiles.names(root(workspaceId));
     }
 
     public String abort(long id) {
@@ -798,6 +1104,9 @@ public class WorkspaceService {
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("threadId", threadId);
         out.put("workspaceId", last.getWorkspaceId());
+        for (WorkspaceTurn x : items) {
+            x.setCheckpoint(x.getChanged() != null && checkpoints.has(x.getWorkspaceId(), x.getId()));
+        }
         out.put("turns", items);
         out.put("liveId", last.getId());
         out.put("events", events.events(eventId(last.getId()), afterEventId, 500));

@@ -46,6 +46,8 @@ public interface WorkspaceMapper {
                 output_tokens      BIGINT       NOT NULL DEFAULT 0,
                 elapsed_ms         BIGINT       NOT NULL DEFAULT 0,
                 changed            TEXT,
+                origin             VARCHAR(16),
+                reverted_at        TIMESTAMPTZ,
                 created_at         TIMESTAMPTZ  NOT NULL DEFAULT now(),
                 started_at         TIMESTAMPTZ,
                 finished_at        TIMESTAMPTZ,
@@ -68,6 +70,13 @@ public interface WorkspaceMapper {
     /** 1.15.0: 이 차례에 바뀐 파일 목록. */
     @Update("ALTER TABLE workspace_turn ADD COLUMN IF NOT EXISTS changed TEXT")
     void ensureChangedColumn();
+
+    /** 1.18.0: 접수 경로(메신저)와 되돌린 시각. */
+    @Update("ALTER TABLE workspace_turn ADD COLUMN IF NOT EXISTS origin VARCHAR(16)")
+    void ensureOriginColumn();
+
+    @Update("ALTER TABLE workspace_turn ADD COLUMN IF NOT EXISTS reverted_at TIMESTAMPTZ")
+    void ensureRevertedColumn();
 
     // ---------------------------------------------------------------- 작업 공간
 
@@ -96,8 +105,8 @@ public interface WorkspaceMapper {
     // ---------------------------------------------------------------- 차례
 
     @Insert("""
-            INSERT INTO workspace_turn (workspace_id, thread_id, question, state, model)
-            VALUES (#{workspaceId}, #{threadId}, #{question}, #{state}, #{model})
+            INSERT INTO workspace_turn (workspace_id, thread_id, question, state, model, origin)
+            VALUES (#{workspaceId}, #{threadId}, #{question}, #{state}, #{model}, #{origin})
             """)
     @Options(useGeneratedKeys = true, keyProperty = "id", keyColumn = "id")
     int insert(WorkspaceTurn t);
@@ -113,6 +122,13 @@ public interface WorkspaceMapper {
             WHERE id = #{id}
             """)
     int update(WorkspaceTurn t);
+
+    @Update("UPDATE workspace_turn SET reverted_at = now(), updated_at = now() WHERE id = #{id}")
+    int markReverted(@Param("id") long id);
+
+    /** 작업 공간에서 가장 최근에 쓴 대화(메신저에서 「이어서」 보낼 때). */
+    @Select("SELECT thread_id FROM workspace_turn WHERE workspace_id = #{workspaceId} ORDER BY id DESC LIMIT 1")
+    Long lastThread(@Param("workspaceId") long workspaceId);
 
     @Select("SELECT * FROM workspace_turn WHERE id = #{id}")
     WorkspaceTurn find(@Param("id") long id);

@@ -217,6 +217,8 @@ CREATE TABLE IF NOT EXISTS workspace_turn (
     output_tokens      BIGINT       NOT NULL DEFAULT 0,
     elapsed_ms         BIGINT       NOT NULL DEFAULT 0,
     changed            TEXT,                             -- 이 차례에 바뀐 파일(줄마다 "A|M|D 상대경로", 요청 전후 스냅샷 비교)
+    origin             VARCHAR(16),                      -- 접수 경로: NULL = 화면, messenger = 메신저(끝나면 메신저로 답)
+    reverted_at        TIMESTAMPTZ,                      -- 화면에서 이 차례의 변경을 되돌린 시각
     created_at         TIMESTAMPTZ  NOT NULL DEFAULT now(),
     started_at         TIMESTAMPTZ,
     finished_at        TIMESTAMPTZ,

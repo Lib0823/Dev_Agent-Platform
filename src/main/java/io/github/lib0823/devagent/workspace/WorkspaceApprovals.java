@@ -140,6 +140,11 @@ public class WorkspaceApprovals {
                 .sorted(Comparator.comparingLong(Pending::createdAt)).toList();
     }
 
+    /** 가장 오래 기다린 확인(메신저의 「허용/거부」가 답할 대상). 없으면 null. */
+    public Pending oldest() {
+        return waiting.values().stream().map(Entry::pending).min(Comparator.comparingLong(Pending::createdAt)).orElse(null);
+    }
+
     /** 답을 기다리는 차례가 있는가(목록의 표시용): 차례 id → 대기 수. */
     public Map<Long, Integer> waitingTurns() {
         Map<Long, Integer> m = new LinkedHashMap<>();

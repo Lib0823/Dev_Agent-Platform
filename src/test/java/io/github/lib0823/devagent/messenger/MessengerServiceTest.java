@@ -55,7 +55,7 @@ class MessengerServiceTest {
         svc.sendToSelf("[AI] 명령의 답은 항상");            // 알림이 아닌 전송은 설정과 무관
         assertEquals(List.of("SELF:U440:[이슈] 확인", "SELF:U440:[AI] 명령의 답은 항상"), port.sent);
         assertTrue(svc.notifyOn(MessengerService.NOTICE_SYSTEM));
-        assertEquals(5, MessengerService.NOTICES.size());
+        assertEquals(6, MessengerService.NOTICES.size());
     }
 
     @Test

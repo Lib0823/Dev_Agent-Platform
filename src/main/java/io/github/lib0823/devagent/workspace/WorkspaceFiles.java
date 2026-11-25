@@ -328,6 +328,11 @@ final class WorkspaceFiles {
 
     /** 두 스냅샷의 차이: "A 경로"(새 파일) · "M 경로"(수정) · "D 경로"(삭제), 경로순, 최대 {@link #MAX_CHANGED} 줄. */
     static List<String> changes(Map<String, long[]> before, Map<String, long[]> after) {
+        return changes(before, after, MAX_CHANGED);
+    }
+
+    /** {@link #changes(Map, Map)} 와 같되 줄 수 상한을 준다(되돌리기 지점은 잘리지 않은 전체 목록이 필요하다). */
+    static List<String> changes(Map<String, long[]> before, Map<String, long[]> after, int max) {
         if (before == null || after == null) {
             return List.of();
         }
@@ -339,11 +344,106 @@ final class WorkspaceFiles {
             long[] a = after.get(n);
             String kind = b == null ? "A" : a == null ? "D" : (a[0] != b[0] || a[1] != b[1]) ? "M" : null;
             if (kind != null) {
-                if (out.size() >= MAX_CHANGED) {
+                if (out.size() >= max) {
                     out.add("… 그 밖에 더 있음");
                     break;
                 }
                 out.add(kind + " " + n);
+            }
+        }
+        return out;
+    }
+
+    // ---------------------------------------------------------------- 파일 이름 목록(이름으로 찾기)
+
+    static final int MAX_NAMES = 20_000;
+
+    /**
+     * 폴더 전체의 파일 경로(상대 경로, 경로순). 화면의 「파일 찾기」가 한 번 받아 두고 이름으로 거른다.
+     * 의존성·빌드 폴더는 스냅샷과 같은 기준으로 건너뛰고, {@link #MAX_NAMES} 를 넘으면 거기까지만({@code more=true}).
+     */
+    static Map<String, Object> names(Path root) {
+        Path base = root.toAbsolutePath().normalize();
+        List<String> files = new ArrayList<>();
+        boolean[] over = {false};
+        try {
+            Files.walkFileTree(base, new SimpleFileVisitor<>() {
+                @Override
+                public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
+                    return !dir.equals(base) && SNAPSHOT_SKIP.contains(dir.getFileName().toString())
+                            ? FileVisitResult.SKIP_SUBTREE : FileVisitResult.CONTINUE;
+                }
+
+                @Override
+                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
+                    if (attrs.isRegularFile()) {
+                        if (files.size() >= MAX_NAMES) {
+                            over[0] = true;
+                            return FileVisitResult.TERMINATE;
+                        }
+                        files.add(base.relativize(file).toString().replace('\\', '/'));
+                    }
+                    return FileVisitResult.CONTINUE;
+                }
+
+                @Override
+                public FileVisitResult visitFileFailed(Path file, IOException exc) {
+                    return FileVisitResult.CONTINUE;
+                }
+            });
+        } catch (IOException | RuntimeException e) {
+            throw new IllegalArgumentException("폴더를 읽을 수 없습니다.");
+        }
+        files.sort(String.CASE_INSENSITIVE_ORDER);
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("files", files);
+        out.put("more", over[0]);
+        return out;
+    }
+
+    // ---------------------------------------------------------------- 차례의 변경분(되돌리기 지점의 요청 전·후 파일 비교)
+
+    /**
+     * 두 파일의 차이(통합 diff). 저장소가 아니어도 되도록 {@code git diff --no-index} 를 쓴다(없는 쪽은 빈 파일과 비교).
+     * git 이 없으면 {@code error}.
+     */
+    static Map<String, Object> fileDiff(Path before, Path after) {
+        Map<String, Object> out = new LinkedHashMap<>();
+        Path empty = null;
+        try {
+            if (before == null || after == null) {
+                empty = Files.createTempFile("dev-agent-empty-", ".txt");
+            }
+            Path a = before == null ? empty : before;
+            Path b = after == null ? empty : after;
+            if (Files.size(a) > MAX_TEXT_BYTES || Files.size(b) > MAX_TEXT_BYTES) {
+                out.put("error", "파일이 커서 변경분을 비교하지 않습니다.");
+                return out;
+            }
+            String[] d = git(a.getParent(), true, "-c", "core.quotepath=false", "diff", "--no-index", "--no-color", "--", a.toString(), b.toString());
+            if (d == null) {
+                out.put("error", "변경분을 비교하지 못했습니다(git 을 실행할 수 없습니다).");
+                return out;
+            }
+            // 파일 머리(diff --git · --- · +++)에는 보관 폴더의 절대 경로가 들어 있다: 내보내지 않고 첫 변경 묶음(@@)부터만 싣는다
+            String diff = d[0].replace("\r\n", "\n");
+            int at = diff.startsWith("@@") ? 0 : diff.indexOf("\n@@");
+            diff = at < 0 ? "" : diff.substring(at == 0 ? 0 : at + 1);
+            if (diff.length() > MAX_DIFF_CHARS) {
+                diff = diff.substring(0, MAX_DIFF_CHARS);
+                out.put("truncated", true);
+            }
+            out.put("git", true);
+            out.put("diff", diff);
+        } catch (IOException | RuntimeException e) {
+            out.put("error", "변경분을 비교하지 못했습니다.");
+        } finally {
+            if (empty != null) {
+                try {
+                    Files.deleteIfExists(empty);
+                } catch (IOException ignore) {
+                    // 임시 파일
+                }
             }
         }
         return out;
@@ -386,6 +486,11 @@ final class WorkspaceFiles {
 
     /** git 실행. 성공하면 {표준 출력}, 실패(저장소 아님·git 없음·시간 초과)면 null. */
     private static String[] git(Path root, String... args) {
+        return git(root, false, args);
+    }
+
+    /** {@code diffExit} 가 true 면 종료 코드 1(차이 있음 — {@code --no-index} 의 정상 결과)도 성공으로 본다. */
+    private static String[] git(Path root, boolean diffExit, String... args) {
         List<String> cmd = new ArrayList<>(List.of("git", "-c", "core.longpaths=true"));
         cmd.addAll(List.of(args));
         try {
@@ -401,7 +506,7 @@ final class WorkspaceFiles {
                 return null;
             }
             err.join();
-            return p.exitValue() == 0 ? new String[]{out.join()} : null;
+            return p.exitValue() == 0 || diffExit && p.exitValue() == 1 ? new String[]{out.join()} : null;
         } catch (IOException e) {
             return null;
         } catch (InterruptedException e) {

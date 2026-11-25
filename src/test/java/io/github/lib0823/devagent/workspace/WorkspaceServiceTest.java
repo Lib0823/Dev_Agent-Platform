@@ -154,4 +154,29 @@ class WorkspaceServiceTest {
         w.setMode(Workspace.BYPASS);
         assertTrue(WorkspacePrompts.system(w, Path.of("x").toAbsolutePath(), 50).contains("확인 없이 바로"));
     }
+
+    @Test
+    void messengerCommandSplitsWorkspaceNameFromRequest() {
+        assertEquals(5, WorkspaceService.indexOfColon("paper: 3장 표를 다시 채워 줘"));
+        assertEquals(2, WorkspaceService.indexOfColon("논문： 서론 다듬어 줘"));                    // 전각 콜론
+        assertEquals(-1, WorkspaceService.indexOfColon("서버 상태 확인해 줘"));
+        assertEquals(-1, WorkspaceService.indexOfColon("https://example.com 문서 읽고 정리해 줘"));   // 주소의 콜론은 이름 구분이 아니다
+        assertEquals(12, WorkspaceService.indexOfColon("C:\\work\\a.md: 고쳐 줘"));                  // 드라이브 문자도
+
+        Workspace paper = ws("paper-2026");
+        Workspace infra = ws("infra");
+        Workspace paperOld = ws("paper-2025");
+        List<Workspace> all = List.of(paper, infra, paperOld);
+        assertEquals(infra, WorkspaceService.match(all, "INFRA"));
+        assertEquals(infra, WorkspaceService.match(all, "inf"));
+        assertEquals(paper, WorkspaceService.match(all, "2026"));
+        assertNull(WorkspaceService.match(all, "paper"));          // 둘에 걸리면 고르지 않는다(엉뚱한 폴더에서 일하지 않게)
+        assertNull(WorkspaceService.match(all, ""));
+    }
+
+    private static Workspace ws(String name) {
+        Workspace w = new Workspace();
+        w.setName(name);
+        return w;
+    }
 }

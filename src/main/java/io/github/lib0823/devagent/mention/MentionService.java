@@ -10,6 +10,7 @@ import io.github.lib0823.devagent.config.DocsProperties;
 import io.github.lib0823.devagent.docs.KnowledgeSource;
 import io.github.lib0823.devagent.mcp.OpsQueryService;
 import io.github.lib0823.devagent.research.ResearchService;
+import io.github.lib0823.devagent.workspace.WorkspaceService;
 import io.github.lib0823.devagent.gitlab.IssueAgentService;
 import io.github.lib0823.devagent.messenger.MessengerService;
 import io.github.lib0823.devagent.llm.ChatModel;
@@ -54,12 +55,14 @@ public class MentionService {
     private final IssueAgentService issueAgent;
     private final OpsQueryService ops;
     private final ResearchService research;
+    private final WorkspaceService workspaces;
 
     public MentionService(MessengerService client, ChatModel claude, ChatMessageMapper messageMapper,
                           MentionReplyMapper replyMapper, RoomCursorMapper cursorMapper,
                           BotProperties bot, SettingService settings,
                           KnowledgeSource docs, DocsProperties docsProps, IssueAgentService issueAgent,
-                          OpsQueryService ops, ResearchService research) {
+                          OpsQueryService ops, ResearchService research, WorkspaceService workspaces) {
+        this.workspaces = workspaces;
         this.research = research;
         this.client = client;
         this.claude = claude;
@@ -206,6 +209,25 @@ public class MentionService {
             client.sendToSelf("[질의] " + reply);
             record(c, "RESEARCH", reply, null);
             log.info("질의 명령 처리 messageId={}", c.getMessageId());
+            return;
+        }
+        // "@AI 작업 <작업 공간>: …" / "@AI 새작업 …" → 작업 공간에 요청(등록한 폴더에서 파일 수정·명령 실행, 자기방에서만).
+        // 자리를 비운 채 일을 시키는 길: 결과와 실행 전 확인 요청이 자기방으로 오고 "@AI 작업 허용/거부/중단/상태" 로 답한다
+        boolean fresh = rest.startsWith("새작업 ") || rest.equals("새작업");
+        if (fresh || rest.startsWith("작업 ") || rest.equals("작업")) {
+            if (!self) {
+                record(c, "SKIPPED", null, "workspace-cmd-not-self");
+                return;
+            }
+            String reply;
+            try {
+                reply = workspaces.messengerCommand(rest.substring(fresh ? 3 : 2).strip(), fresh);
+            } catch (RuntimeException e) {
+                reply = "처리하지 못했습니다: " + e.getMessage();
+            }
+            client.sendToSelf(WorkspaceService.PFX + reply);
+            record(c, "WORKSPACE", reply, null);
+            log.info("작업 공간 명령 처리 messageId={}", c.getMessageId());
             return;
         }
         // 이슈 에이전트가 자기방에서 확인 답변을 기다리는 중이면, 자기방 @AI 메시지는 그 답변이므로 일반 응답을 양보

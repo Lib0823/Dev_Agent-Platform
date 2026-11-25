@@ -28,6 +28,9 @@ public class WorkspaceTurn {
     private long outputTokens;
     private long elapsedMs;
     private String changed;           // 이 차례에 바뀐 파일(줄마다 "A|M|D 상대경로"). 파일이 너무 많은 폴더는 비어 있다
+    private String origin;            // 접수 경로: null = 화면, "messenger" = 메신저(끝나면 메신저로 답을 보낸다)
+    private OffsetDateTime revertedAt; // 화면에서 이 차례의 변경을 되돌린 시각(없으면 null)
+    private boolean checkpoint;       // 되돌리기 지점이 남아 있는가(DB 에 없음 — 조회할 때 채운다)
     private OffsetDateTime createdAt;
     private OffsetDateTime startedAt;
     private OffsetDateTime finishedAt;
@@ -65,6 +68,12 @@ public class WorkspaceTurn {
     public void setElapsedMs(long elapsedMs) { this.elapsedMs = elapsedMs; }
     public String getChanged() { return changed; }
     public void setChanged(String changed) { this.changed = changed; }
+    public String getOrigin() { return origin; }
+    public void setOrigin(String origin) { this.origin = origin; }
+    public OffsetDateTime getRevertedAt() { return revertedAt; }
+    public void setRevertedAt(OffsetDateTime revertedAt) { this.revertedAt = revertedAt; }
+    public boolean isCheckpoint() { return checkpoint; }
+    public void setCheckpoint(boolean checkpoint) { this.checkpoint = checkpoint; }
     public OffsetDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(OffsetDateTime createdAt) { this.createdAt = createdAt; }
     public OffsetDateTime getStartedAt() { return startedAt; }

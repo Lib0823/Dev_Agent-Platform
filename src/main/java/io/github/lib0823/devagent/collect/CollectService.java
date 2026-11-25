@@ -186,7 +186,7 @@ public class CollectService {
             return false;
         }
         return body.startsWith("[멘션 초안]") || body.startsWith("[방 요약]")
-                || body.startsWith("[자동응답]") || body.startsWith("[AI]") || body.startsWith("[이슈]") || body.startsWith("[질의]")
+                || body.startsWith("[자동응답]") || body.startsWith("[AI]") || body.startsWith("[이슈]") || body.startsWith("[질의]") || body.startsWith("[작업]")
                 || body.startsWith("[봇");
     }
 }

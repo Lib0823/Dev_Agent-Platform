@@ -81,6 +81,35 @@ public class WorkspaceController {
         return view(() -> workspaces.diff(id, path));
     }
 
+    /** 폴더 전체의 파일 경로(「파일 찾기」가 한 번 받아 이름으로 거른다). */
+    @GetMapping("/api/workspaces/{id}/names")
+    public ResponseEntity<Map<String, Object>> names(@PathVariable long id) {
+        return view(() -> workspaces.names(id));
+    }
+
+    /** 그 차례에서 이 파일이 바뀐 내용(요청 전 → 요청 후, 되돌리기 지점에서). */
+    @GetMapping("/api/workspaces/turns/{id}/diff")
+    public ResponseEntity<Map<String, Object>> turnDiff(@PathVariable long id, @RequestParam String path) {
+        return view(() -> workspaces.turnDiff(id, path));
+    }
+
+    /** 그 차례가 바꾼 파일을 요청 전 상태로 되돌린다(이후에 또 바뀐 파일은 건너뛴다). */
+    @PostMapping("/api/workspaces/turns/{id}/revert")
+    public Map<String, Object> revert(@PathVariable long id, HttpServletRequest req) {
+        Map<String, Object> out = new LinkedHashMap<>();
+        // 파일을 덮어쓰는 일이라 화면에서 온 요청만 받는다(세션이 로컬 API 로 스스로 부르지 못하게)
+        if (SystemController.notFromPage(req)) {
+            return fail(out, FOREIGN);
+        }
+        try {
+            out.put("ok", true);
+            out.put("result", workspaces.revert(id));
+        } catch (IllegalArgumentException e) {
+            fail(out, e.getMessage());
+        }
+        return out;
+    }
+
     /** 그림 파일 바이트(png·jpg·gif·webp 만 — 문서 미리보기의 그림용). */
     @GetMapping("/api/workspaces/{id}/raw")
     public ResponseEntity<Resource> raw(@PathVariable long id, @RequestParam String path) {

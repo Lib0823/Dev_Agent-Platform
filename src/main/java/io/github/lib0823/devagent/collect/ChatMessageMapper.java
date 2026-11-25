@@ -38,6 +38,7 @@ public interface ChatMessageMapper {
               AND body NOT LIKE '[AI]%'           -- 봇이 보낸 AI 답변 제외
               AND body NOT LIKE '[이슈]%'
               AND body NOT LIKE '[질의]%'         -- 봇이 보낸 이슈 에이전트 메시지 제외
+              AND body NOT LIKE '[작업]%'
             ORDER BY sent_at ASC
             LIMIT #{limit}
             """)
@@ -74,6 +75,7 @@ public interface ChatMessageMapper {
               AND body NOT LIKE '[AI]%'
               AND body NOT LIKE '[이슈]%'
               AND body NOT LIKE '[질의]%'
+              AND body NOT LIKE '[작업]%'
             ORDER BY sent_at DESC
             LIMIT #{limit}
             """)
@@ -97,6 +99,7 @@ public interface ChatMessageMapper {
               AND body NOT LIKE '[AI]%'
               AND body NOT LIKE '[이슈]%'
               AND body NOT LIKE '[질의]%'
+              AND body NOT LIKE '[작업]%'
               AND body NOT LIKE '[봇%'          -- [봇] 시작됨 / [봇 오류] (재시작·알림이 답변으로 오인되던 버그)
             ORDER BY seq ASC
             LIMIT 20

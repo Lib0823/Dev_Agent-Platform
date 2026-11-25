@@ -13,12 +13,35 @@
   .body { display: grid; grid-template-columns: var(--side-w, 320px) minmax(0, 1fr); gap: 18px; padding: 18px 22px 48px; flex: 1; }
   .wside { padding: 14px; position: sticky; top: 78px; height: calc(100vh - 96px); display: flex; flex-direction: column; gap: 12px; }
   .wmain { position: sticky; top: 78px; height: calc(100vh - 96px); display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); min-width: 0; overflow: hidden; }
-  .wmain.files { grid-template-columns: minmax(360px, 1fr) minmax(0, 1.4fr); }
+  /* 대화 | 파일: 경계(.wsplit)를 끌어 비율(--chat-w)을 바꾼다. 본문이 좁거나(.narrow, JS 가 폭을 보고 붙임) 「파일만 크게」(.fmax)면 파일만 */
+  .wmain.files { grid-template-columns: clamp(320px, var(--chat-w, 42%), calc(100% - 380px)) minmax(0, 1fr); }
   .wcol { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
   .wfiles { display: none; flex-direction: column; min-width: 0; min-height: 0; border-left: 1px solid var(--line); }
   .wmain.files .wfiles { display: flex; }
-  @media (max-width: 1300px) { .wmain.files { grid-template-columns: minmax(0, 1fr); } .wmain.files .wcol { display: none; } .wfiles { border-left: 0; } }
+  .wmain.files.narrow, .wmain.files.fmax { grid-template-columns: minmax(0, 1fr); }
+  .wmain.files.narrow .wcol, .wmain.files.fmax .wcol { display: none; }
+  .wmain.files.narrow .wfiles, .wmain.files.fmax .wfiles { border-left: 0; }
+  .wsplit { display: none; position: absolute; top: 0; bottom: 0; left: clamp(320px, var(--chat-w, 42%), calc(100% - 380px)); width: 11px; margin-left: -5px; cursor: col-resize; z-index: 7; touch-action: none; }
+  .wmain.files:not(.narrow):not(.fmax) .wsplit { display: block; }
+  .wsplit::after { content: ""; position: absolute; top: 0; bottom: 0; left: 5px; width: 2px; background: var(--accent); opacity: 0; transition: opacity .15s; }
+  .wsplit:hover::after, .wsplit.drag::after { opacity: .6; }
   @media (max-width: 980px) { .body { grid-template-columns: 1fr; } .wside { position: static; height: auto; max-height: 46vh; } .wmain { position: static; height: 78vh; } }
+
+  /* 작업 목록 접기(body.sideoff): 목록을 숨겨 본문을 넓히고, 머리줄의 이름을 누르면 목록이 위에 겹쳐 뜬다(body.sidepop) */
+  body.sideoff .body { grid-template-columns: minmax(0, 1fr); }
+  body.sideoff .wside, body.sideoff .splitter { display: none; }
+  body.sideoff.sidepop .wside { display: flex; position: fixed; left: 22px; top: 74px; width: min(360px, calc(100vw - 44px)); height: auto; max-height: calc(100vh - 110px); z-index: 40; box-shadow: 0 22px 50px -14px rgba(0,0,0,.6); border-color: var(--line2); animation: up .12s ease-out; }
+  body.sideoff .whead .wt { cursor: pointer; border-radius: 9px; padding: 3px 9px; margin: -3px -9px; }
+  body.sideoff .whead .wt:hover, body.sidepop .whead .wt { background: var(--surface2); }
+  body.sideoff #hPath { font-family: var(--font); font-size: 12px; }
+  body.sideoff #hName::after { content: " ▾"; color: var(--muted); font-size: 11px; font-weight: 400; }
+  .icon-btn.on { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); background: color-mix(in srgb, var(--accent) 10%, var(--surface)); }
+
+  /* 파일만 별도 창으로 뗀 것(body.pop): 상단바·목록·대화 없이 파일 패널만 창 가득 */
+  body.pop #topbar, body.pop .wside, body.pop .wcol, body.pop .splitter, body.pop .wsplit, body.pop #fClose, body.pop #fMax, body.pop #fPop { display: none !important; }
+  body.pop .body { grid-template-columns: minmax(0, 1fr); padding: 0; }
+  body.pop .wmain { position: static; height: 100vh; border-radius: 0; border: 0; grid-template-columns: minmax(0, 1fr) !important; }
+  body.pop .wfiles { display: flex; border-left: 0; }
 
   /* ---------- sidebar ---------- */
   .wside .btn.add { justify-content: center; }
@@ -103,9 +126,41 @@
   .fbar .fp b { color: var(--text); font-weight: 600; }
   .fbar .seg { flex-wrap: nowrap; flex: none; } .fbar .seg .tab { height: 28px; padding: 0 10px; font-size: 12.5px; }
   .fbar .icon-btn { width: 30px; height: 30px; flex: none; }
-  .fbody { flex: 1; min-height: 0; display: grid; grid-template-columns: 230px minmax(0, 1fr); }
-  .wfiles.notree .fbody { grid-template-columns: minmax(0, 1fr); } .wfiles.notree .ftree { display: none; }
-  .ftree { overflow: auto; border-right: 1px solid var(--line); padding: 8px 6px; font-size: 12.5px; overscroll-behavior: contain; }
+  .fbar .fp { cursor: pointer; }
+  /* 폴더 트리: 평소에는 접혀 있고, 열면 파일 위에 겹쳐 떴다가(.treeopen) 파일을 고르면 닫힌다. 핀으로 옆에 고정(.pin)할 수 있다 */
+  .fbody { flex: 1; min-height: 0; position: relative; display: grid; grid-template-columns: minmax(0, 1fr); }
+  .ftw { display: none; flex-direction: column; min-width: 0; min-height: 0; background: var(--surface); border-right: 1px solid var(--line); }
+  .wfiles.treeopen .ftw { display: flex; position: absolute; left: 0; top: 0; bottom: 0; width: min(320px, 88%); z-index: 6; box-shadow: 18px 0 34px -20px rgba(0,0,0,.65); }
+  .wfiles.pin .fbody { grid-template-columns: 240px minmax(0, 1fr); }
+  .wfiles.pin .ftw { display: flex; position: static; width: auto; box-shadow: none; }
+  .fth { flex: none; display: flex; gap: 6px; padding: 8px; border-bottom: 1px solid var(--line); }
+  .fth .fq { flex: 1; min-width: 0; display: flex; align-items: center; gap: 7px; height: 30px; padding: 0 9px; border-radius: 9px; border: 1px solid var(--line); background: var(--surface2); color: var(--muted); font-size: 12.5px; cursor: pointer; }
+  .fth .fq:hover { border-color: var(--line2); color: var(--text); }
+  .fth .fq span { flex: 1; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .fth .fq kbd, .qft kbd { font-size: 10.5px; border: 1px solid var(--line2); border-radius: 4px; padding: 0 4px; color: var(--muted); }
+  .ftree { flex: 1; min-height: 0; overflow: auto; padding: 8px 6px; font-size: 12.5px; overscroll-behavior: contain; }
+
+  /* 파일 찾기(Ctrl+P): 이름으로 걸러 열거나, 입력칸에 경로를 넣는다 */
+  .qo { position: fixed; inset: 0; z-index: 80; background: rgba(0,0,0,.38); display: flex; justify-content: center; align-items: flex-start; padding: 12vh 16px 0; }
+  .qo[hidden] { display: none; }
+  .qbox { width: min(640px, 100%); background: var(--surface); border: 1px solid var(--line2); border-radius: 14px; box-shadow: 0 30px 70px -20px rgba(0,0,0,.7); overflow: hidden; animation: up .12s ease-out; }
+  .qbox input.in { border: 0; border-bottom: 1px solid var(--line); border-radius: 0; height: 46px; font-size: 14.5px; padding: 0 16px; background: transparent; box-shadow: none; }
+  .qlist { max-height: min(420px, 52vh); overflow: auto; padding: 6px; overscroll-behavior: contain; }
+  .qr { display: flex; align-items: baseline; gap: 10px; height: 30px; padding: 0 10px; border-radius: 8px; cursor: pointer; font-size: 13px; white-space: nowrap; }
+  .qr b { font-weight: 600; flex: none; max-width: 60%; overflow: hidden; text-overflow: ellipsis; }
+  .qr span { color: var(--muted); font-family: var(--mono); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .qr i { margin-left: auto; flex: none; font-style: normal; font-size: 11px; color: var(--muted); }
+  .qr.sel { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+  .qnone { color: var(--muted); font-size: 12.5px; padding: 16px 12px; }
+  .qft { display: flex; gap: 14px; flex-wrap: wrap; padding: 8px 14px; border-top: 1px solid var(--line); font-size: 11.5px; color: var(--muted); background: var(--surface2); }
+
+  /* 긁은 부분으로 질문: 파일·답변에서 글을 긁으면 옆에 뜬다 */
+  .selask { position: fixed; z-index: 70; display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 11px; border-radius: 9px; border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent); background: var(--accent); color: var(--accent-ink); font-size: 12.5px; font-weight: 600; cursor: pointer; box-shadow: 0 10px 26px -10px rgba(0,0,0,.6); }
+  .selask[hidden] { display: none; }
+  .selask svg { width: 13px; height: 13px; }
+  .wchg .rv { margin-left: auto; }
+  .wchg .btn.ghost { height: 24px; padding: 0 8px; font-size: 11.5px; background: transparent; border-color: transparent; color: var(--muted); box-shadow: none; }
+  .wchg .btn.ghost:hover { color: var(--text); border-color: var(--line2); background: var(--surface); }
   .fr { display: flex; align-items: center; gap: 5px; height: 25px; padding-right: 6px; border-radius: 6px; cursor: pointer; white-space: nowrap; color: var(--text2); }
   .fr:hover { background: var(--surface2); color: var(--text); }
   .fr.sel { background: var(--surface2); color: var(--text); font-weight: 600; box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent) inset; }
@@ -217,7 +272,8 @@
     <main class="panel-card wmain" id="main">
       <div class="wcol">
         <div class="whead" id="whead" style="display:none">
-          <div class="wt"><b id="hName"></b><span id="hPath"></span></div>
+          <button class="icon-btn" id="btnSide" onclick="toggleSide()" title="작업 목록 접기/펴기 (Alt+B)"></button>
+          <div class="wt" id="hSwitch" onclick="sidePop()"><b id="hName"></b><span id="hPath"></span></div>
           <span class="badge" id="hMode"></span>
           <select class="in" id="wModel" title="이 요청에 쓸 모델"></select>
           <button class="icon-btn" id="btnFiles" onclick="toggleFiles()" title="파일 패널 열기/닫기 (Alt+P)"></button>
@@ -230,16 +286,25 @@
           <button class="btn primary" id="wSend" onclick="send()" title="보내기 (Enter)"></button>
         </div>
       </div>
+      <div class="wsplit" id="wsplit" title="끌어서 대화·파일 폭 조절 · 더블클릭하면 기본 폭"></div>
       <aside class="wfiles" id="wfiles">
         <div class="fbar">
-          <button class="icon-btn" id="fTreeBtn" onclick="toggleTree()" title="폴더 트리 접기/펴기"></button>
-          <div class="fp" id="fPath"></div>
+          <button class="icon-btn" id="fTreeBtn" onclick="toggleTree()" title="폴더 트리 — 파일을 고르면 닫힙니다(트리 안의 핀으로 옆에 고정)"></button>
+          <div class="fp" id="fPath" onclick="toggleTree(true)"></div>
           <div class="seg" id="fModes"></div>
-          <button class="icon-btn" id="fReload" onclick="reloadFiles()" title="새로 읽기"></button>
-          <button class="icon-btn" id="fClose" onclick="toggleFiles(false)" title="파일 패널 닫기"></button>
+          <button class="icon-btn" id="fMax" onclick="toggleMax()" title="파일만 크게 보기 / 대화와 나란히 (Alt+Shift+P)"></button>
+          <button class="icon-btn" id="fPop" onclick="popOut()" title="파일 보기를 별도 창으로 떼기(다른 모니터에 두고 대화와 나란히)"></button>
+          <button class="icon-btn" id="fClose" onclick="toggleFiles(false)" title="파일 패널 닫기 (Alt+P)"></button>
         </div>
         <div class="fbody">
-          <div class="ftree" id="ftree"></div>
+          <div class="ftw" id="ftw">
+            <div class="fth">
+              <button class="fq" id="fFind" onclick="openQo()" title="파일 이름으로 찾기"></button>
+              <button class="icon-btn" id="fReload" onclick="reloadFiles()" title="새로 읽기"></button>
+              <button class="icon-btn" id="fPin" onclick="togglePin()" title="트리를 옆에 고정 / 고정 풀기"></button>
+            </div>
+            <div class="ftree" id="ftree"></div>
+          </div>
           <div class="fview" id="fview"></div>
         </div>
       </aside>
@@ -295,11 +360,22 @@
     <button class="btn primary" id="riGo" onclick="registerIssue()">등록</button>
   </div>
 </dialog>
+<div class="qo" id="qo" hidden>
+  <div class="qbox">
+    <input class="in" id="qIn" autocomplete="off" spellcheck="false" placeholder="파일 이름으로 찾기…">
+    <div class="qlist" id="qList"></div>
+    <div class="qft"><span><kbd>Enter</kbd> <span id="qEnter">열기</span></span><span id="qShift"><kbd>Shift+Enter</kbd> 입력칸에 경로 넣기</span><span><kbd>Esc</kbd> 닫기</span><span id="qCount" style="margin-left:auto"></span></div>
+  </div>
+</div>
+<button class="selask" id="selAsk" hidden></button>
 <div class="toasts" id="toasts"></div>
 
 <script src="/ui.js"></script>
 <script>
 const { $, esc, fmt, ago, dur, I, toast } = UI;
+/** 파일 보기만 별도 창으로 뗀 것인가(주소의 pop=1). 이 창은 파일 패널만 보여 주고, 대화 창이 여는 파일을 따라 연다. */
+const POP = /[#&]pop=1/.test(location.hash);
+if (POP) document.body.classList.add('pop');
 UI.topbar('workspace', '작업 공간');
 UI.splitter('workspace', 320);
 UI.pollAgentChip();
@@ -321,7 +397,21 @@ const cur = () => st.list.find(w => w.id === st.sel) || null;
 const live = () => { const t = st.turns[st.turns.length - 1]; return !!t && (t.state === 'NEW' || t.state === 'RUNNING'); };
 const cut = (s, n) => { const t = String(s || '').replace(/\s+/g, ' ').trim(); return t.length > n ? t.slice(0, n) + '…' : t; };
 const hashGet = () => { const m = /w=(\d+)/.exec(location.hash), t = /t=(\d+)/.exec(location.hash); return { w: m ? Number(m[1]) : null, t: t ? Number(t[1]) : null }; };
-const hashSet = () => history.replaceState(null, '', st.sel ? '#w=' + st.sel + (st.thread ? '&t=' + st.thread : '') : location.pathname);
+const hashSet = () => history.replaceState(null, '', st.sel ? '#w=' + st.sel + (st.thread ? '&t=' + st.thread : '') + (POP ? '&pop=1' : '') : location.pathname);
+
+// ---------------------------------------------------------------- 배치: 작업 목록 접기 · 파일만 별도 창
+// 화면을 넷(작업 목록·대화·폴더 트리·파일)으로 나누면 칸마다 좁다 → 평소에는 대화와 파일 두 칸만 두고, 목록과 트리는 필요할 때 겹쳐 띄운다.
+const side = { off: (p => p == null ? window.innerWidth < 1600 : p === '0')(ls('ws.side')), pop: false };
+function applySide() {
+  const off = side.off && !!cur() && !POP;           // 고른 작업 공간이 없으면 목록을 숨기지 않는다(고를 곳이 없어진다)
+  document.body.classList.toggle('sideoff', off); document.body.classList.toggle('sidepop', off && side.pop);
+  $('btnSide').classList.toggle('on', !off);
+}
+function toggleSide() { side.off = !side.off; side.pop = false; ls('ws.side', side.off ? '0' : '1'); applySide(); renderMain(); }
+/** 접어 둔 목록을 머리줄 아래에 겹쳐 띄운다(대화를 고르거나 바깥을 누르면 닫힌다). */
+function sidePop(on) { if (!document.body.classList.contains('sideoff')) return; side.pop = on == null ? !side.pop : !!on; applySide(); }
+function pickThread(id) { selectThread(id); sidePop(false); }
+document.addEventListener('mousedown', e => { if (side.pop && e.target instanceof Element && !e.target.closest('.wside, #hSwitch, #btnSide, dialog')) sidePop(false); });
 
 // ---------------------------------------------------------------- 목록
 async function loadOverview() {
@@ -348,8 +438,8 @@ function renderList() {
       <div class="wn"><b>${esc(w.name)}</b><span>&lrm;${esc(w.path)}</span></div>${w.waiting ? '<span class="wdot ask" title="확인을 기다리는 중"></span>' : w.runningThread ? '<span class="wdot" title="작업 중"></span>' : ''}
       <button class="wgear" onclick="event.stopPropagation();openDlg(${w.id})" title="설정">${GEAR}</button></div>`;
     if (sel) {
-      h += `<div class="wths"><div class="wth new${st.thread == null ? ' sel' : ''}" onclick="selectThread(null)">${I.plus}<span class="tt">새 대화</span></div>`
-        + st.threads.map(t => `<div class="wth${t.id === st.thread ? ' sel' : ''}" onclick="selectThread(${t.id})" title="${esc(cut(t.title, 300))}">
+      h += `<div class="wths"><div class="wth new${st.thread == null ? ' sel' : ''}" onclick="pickThread(null)">${I.plus}<span class="tt">새 대화</span></div>`
+        + st.threads.map(t => `<div class="wth${t.id === st.thread ? ' sel' : ''}" onclick="pickThread(${t.id})" title="${esc(cut(t.title, 300))}">
             <span class="ts ${t.state === 'RUNNING' || t.state === 'NEW' ? 'run' : t.state === 'DONE' ? 'ok' : 'err'}"></span><span class="tt">${esc(cut(t.title, 60))}</span><span class="tw">${ago(t.updatedAt)}</span></div>`).join('')
         + '</div>';
     }
@@ -403,6 +493,7 @@ function renderMain() {
   const w = cur(), b = $('wchat');
   $('whead').style.display = w ? '' : 'none'; $('winput').style.display = w ? '' : 'none';
   const warn = $('wWarn');
+  applySide();
   if (!w) {
     warn.style.display = 'none';
     const off = st.info && !st.info.enabled;
@@ -411,7 +502,11 @@ function renderMain() {
       ${off ? '' : `<button class="btn primary" onclick="openDlg(null)">${I.plus}작업 공간 추가</button>`}</div>`);
     return;
   }
-  $('hName').textContent = w.name; $('hPath').textContent = w.path;
+  // 목록을 접어 두었으면 머리줄이 전환 버튼 노릇을 한다: 이름 아래에 지금 대화를 보여 준다
+  const th = st.threads.find(t => t.id === st.thread), folded = document.body.classList.contains('sideoff');
+  $('hName').textContent = w.name; $('hPath').textContent = folded ? (th ? cut(th.title, 70) : '새 대화') : w.path;
+  $('hSwitch').title = folded ? w.path + '\n누르면 작업 공간·대화 목록이 열립니다' : w.path;
+  if (POP) document.title = w.name + ' — 파일';
   const hm = $('hMode'); hm.textContent = MODE_KO[w.mode] || w.mode; hm.className = 'badge ' + (MODE_CLS[w.mode] || '');
   hm.title = '이 작업 공간의 실행 방식' + (w.opsMcp ? ' · MCP 도구 사용' : '') + ((w.skills || []).length ? ' · 스킬 ' + w.skills.join(', ') : '') + ' — 왼쪽 목록의 톱니바퀴에서 바꿉니다';
   const lim = st.info && st.info.limited;
@@ -441,7 +536,7 @@ function renderMain() {
       const bad = t.state !== 'DONE';
       h += `<div class="wa ${bad ? 'bad' : ''}">${t.answerMd ? `<div class="md">${UI.mdLite(t.answerMd)}</div>` : ''}
         ${t.lastError ? `<div class="werr">${esc(t.lastError)}</div>` : ''}${chgHtml(t)}
-        <div class="wmeta">${bad ? `<span class="badge ${t.state === 'ABORTED' ? 'wait' : 'err'}">${STATE_KO[t.state] || esc(t.state)}</span> ` : ''}${t.turns ? t.turns + '턴 · ' : ''}${t.elapsedMs ? dur(t.elapsedMs) + ' · ' : ''}${t.model ? esc(t.model) + ' · ' : ''}${fmt(t.finishedAt || t.createdAt)}<span style="flex:1"></span>${t.answerMd ? `<button class="btn sm ghost" onclick="copyAnswer(${t.id})" title="답변 마크다운 복사">복사</button>` : ''}${t.answerMd && reg.projects.length ? `<button class="btn sm ghost" onclick="openRegister(${t.id})" title="이 답변을 GitLab 이슈로 등록해 이슈 에이전트에게 넘깁니다(등록 전에 고칠 수 있음)">이슈로 등록</button>` : ''}</div></div>`;
+        <div class="wmeta">${bad ? `<span class="badge ${t.state === 'ABORTED' ? 'wait' : 'err'}">${STATE_KO[t.state] || esc(t.state)}</span> ` : ''}${t.origin === 'messenger' ? '<span class="badge gray" title="메신저(@AI 작업 …)로 보낸 요청">메신저</span> ' : ''}${t.turns ? t.turns + '턴 · ' : ''}${t.elapsedMs ? dur(t.elapsedMs) + ' · ' : ''}${t.model ? esc(t.model) + ' · ' : ''}${fmt(t.finishedAt || t.createdAt)}<span style="flex:1"></span>${t.answerMd ? `<button class="btn sm ghost" onclick="copyAnswer(${t.id})" title="답변 마크다운 복사">복사</button>` : ''}${t.answerMd && reg.projects.length ? `<button class="btn sm ghost" onclick="openRegister(${t.id})" title="이 답변을 GitLab 이슈로 등록해 이슈 에이전트에게 넘깁니다(등록 전에 고칠 수 있음)">이슈로 등록</button>` : ''}</div></div>`;
     }
   }
   UI.set(b, h);
@@ -652,8 +747,15 @@ $('dName').addEventListener('keydown', e => { if (e.key === 'Enter') { e.prevent
 // 서버는 작업 공간 루트 안만 읽어 준다(읽기 전용). 경로는 루트 기준 상대 경로('/'). 요소에는 data-* 로 싣고 위임 클릭으로 받는다(경로에 따옴표가 있어도 안전).
 const IC_FOLDER = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
 const IC_TREE = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="9" y1="4" x2="9" y2="20"/></svg>';
-$('btnFiles').innerHTML = IC_FOLDER; $('fTreeBtn').innerHTML = IC_TREE; $('fReload').innerHTML = I.refresh; $('fClose').innerHTML = I.x;
-const fs = { open: false, dirs: new Map(), expanded: new Set(['']), file: null, data: null, mode: 'source', diff: null, err: null, tick: 0 };
+const IC_LIST = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h10M8 12h12M8 18h9M4 12h.01M4 18h.01"/></svg>';
+const IC_MAX = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>';
+const IC_PIN = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5M9 3h6l-1 6 3 4H7l3-4z"/></svg>';
+const IC_QUOTE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H8l-5 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
+$('btnFiles').innerHTML = IC_FOLDER; $('btnSide').innerHTML = IC_TREE; $('fTreeBtn').innerHTML = IC_LIST; $('fReload').innerHTML = I.refresh; $('fClose').innerHTML = I.x;
+$('fMax').innerHTML = IC_MAX; $('fPop').innerHTML = I.ext; $('fPin').innerHTML = IC_PIN; $('fFind').innerHTML = I.search + '<span>파일 찾기</span><kbd>Ctrl+P</kbd>';
+$('selAsk').innerHTML = IC_QUOTE + '이 부분 물어보기';
+// mode: source(원문) · preview(마크다운) · diff(마지막 커밋과 비교) · turn(그 요청에서 바뀐 내용 — fs.turn 의 되돌리기 지점에서)
+const fs = { open: false, dirs: new Map(), expanded: new Set(['']), file: null, data: null, mode: 'source', diff: null, err: null, tick: 0, turn: null, tdiff: null };
 const rawUrl = (p, v) => `/api/workspaces/${st.sel}/raw?path=${encodeURIComponent(p)}${v ? '&v=' + v : ''}`;
 const isMd = p => /\.(md|markdown|mdx)$/i.test(p || '');
 const unesc = s => String(s).replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');   // esc 의 반대
@@ -668,7 +770,7 @@ function joinPath(base, u) {
 function changedMap() {
   const m = new Map();
   for (let i = st.turns.length - 1; i >= 0; i--) {
-    const c = st.turns[i].changed; if (!c) continue;
+    const c = st.turns[i].changed; if (!c || st.turns[i].revertedAt) continue;   // 되돌린 요청의 변경은 표시하지 않는다
     c.split('\n').forEach(l => { if (l[1] === ' ' && 'AMD'.includes(l[0])) m.set(l.slice(2), l[0]); });
     break;
   }
@@ -678,21 +780,65 @@ function chgHtml(t) {
   if (!t.changed) return '';
   const rows = t.changed.split('\n'), files = rows.filter(l => l[1] === ' ' && 'AMD'.includes(l[0]));
   if (!files.length) return '';
+  // 되돌리기 지점이 있으면(t.checkpoint) 파일을 눌렀을 때 「이 요청의 변경」(요청 전 → 후)을 보여 주고, 그 요청만 되돌릴 수 있다
+  const ck = !!t.checkpoint;
   return `<div class="wchg"><span>바뀐 파일 ${files.length}${rows.length > files.length ? '+' : ''}</span>` + files.slice(0, 24).map(l => {
-    const k = l[0], p = l.slice(2), name = p.slice(p.lastIndexOf('/') + 1);
-    return `<span class="cf ${k}"${k === 'D' ? '' : ` data-open="${esc(p)}"`} title="${esc(p)} (${k === 'A' ? '새 파일' : k === 'M' ? '수정' : '삭제'})"><b>${k}</b><span>${esc(name)}</span></span>`;
-  }).join('') + (files.length > 24 ? `<span>외 ${files.length - 24}개</span>` : '') + '</div>';
+    const k = l[0], p = l.slice(2), name = p.slice(p.lastIndexOf('/') + 1), open = k !== 'D' || ck;
+    return `<span class="cf ${k}"${open ? ` data-open="${esc(p)}"${ck ? ` data-turn="${t.id}"` : ''} style="cursor:pointer"` : ''} title="${esc(p)} (${k === 'A' ? '새 파일' : k === 'M' ? '수정' : '삭제'})${ck ? '\n누르면 이 요청에서 바뀐 내용을 봅니다' : ''}"><b>${k}</b><span>${esc(name)}</span></span>`;
+  }).join('') + (files.length > 24 ? `<span>외 ${files.length - 24}개</span>` : '')
+    + (t.revertedAt ? `<span class="badge wait rv" title="${fmt(t.revertedAt)} 에 요청 전 상태로 되돌렸습니다">되돌림</span>`
+      : ck ? `<button class="btn sm ghost rv" data-revert="${t.id}" title="이 요청이 바꾼 파일을 요청 전 상태로 되돌립니다(이후에 또 바뀐 파일은 건너뜁니다)">되돌리기</button>` : '') + '</div>';
+}
+async function revertTurn(id) {
+  if (live()) { toast('요청을 처리하는 중에는 되돌릴 수 없습니다.', 'warn'); return; }
+  const t = st.turns.find(x => x.id === id); if (!t) return;
+  const n = (t.changed || '').split('\n').filter(l => l[1] === ' ').length;
+  if (!confirm(`이 요청이 바꾼 파일 ${n}개를 요청 전 상태로 되돌릴까요?\n\n· 새로 만든 파일은 지우고, 고치거나 지운 파일은 요청 전 내용으로 돌려놓습니다.\n· 이 요청 뒤에 다시 바뀐 파일은 건드리지 않고 건너뜁니다.\n· 셸 명령이 폴더 밖에 한 일(설치·서버 변경 등)은 되돌리지 못합니다.`)) return;
+  try {
+    const r = await postJ('/api/workspaces/turns/' + id + '/revert');
+    toast(r.result, r.ok ? 'ok' : 'err');
+  } catch (e) { toast('되돌리기 요청 실패', 'err'); }
+  await loadThread(false); if (fs.open) reloadFiles();
 }
 function toggleFiles(on) {
-  fs.open = on == null ? !fs.open : !!on;
-  $('main').classList.toggle('files', fs.open); ls('ws.files', fs.open ? '1' : '0');
-  if (fs.open && st.sel != null) { if (!fs.dirs.has('')) loadDir(''); renderTree(); renderView(); if (fs.file && !fs.data) loadFile(true); }
+  fs.open = POP || (on == null ? !fs.open : !!on);
+  $('main').classList.toggle('files', fs.open); if (!POP) ls('ws.files', fs.open ? '1' : '0');
+  $('btnFiles').classList.toggle('on', fs.open);
+  if (!fs.open) toggleMax(false);
+  if (fs.open && st.sel != null) { if (!fs.dirs.has('')) loadDir(''); if (!fs.file) tree.open = true; applyTree(); renderTree(); renderView(); if (fs.file && !fs.data) loadFile(true); }
 }
-function toggleTree() { const off = $('wfiles').classList.toggle('notree'); ls('ws.tree', off ? '0' : null); }
+/** 파일만 크게(대화를 접는다) ↔ 대화와 나란히. */
+function toggleMax(on) {
+  const m = $('main'), v = on == null ? !m.classList.contains('fmax') : !!on;
+  m.classList.toggle('fmax', v); $('fMax').classList.toggle('on', v);
+}
+// 폴더 트리: 평소에는 접혀 있고 버튼·경로를 누르면 파일 위에 겹쳐 뜬다(파일을 고르면 닫힘). 핀으로 옆에 고정하면 예전처럼 항상 보인다
+const tree = { pin: ls('ws.tree') === 'pin', open: false };
+function applyTree() {
+  const f = $('wfiles'); f.classList.toggle('pin', tree.pin); f.classList.toggle('treeopen', tree.open && !tree.pin);
+  $('fTreeBtn').classList.toggle('on', tree.pin || tree.open); $('fPin').classList.toggle('on', tree.pin);
+}
+function toggleTree(on) {
+  if (tree.pin) { if (on) return; tree.pin = false; tree.open = false; ls('ws.tree', null); }
+  else tree.open = on == null ? !tree.open : !!on;
+  applyTree(); if (tree.open) renderTree();
+}
+function togglePin() { tree.pin = !tree.pin; tree.open = !tree.pin; ls('ws.tree', tree.pin ? 'pin' : null); applyTree(); }
+/** 별도 창으로 떼기: 파일 보기만 새 창에 띄우고 이 창은 대화에 쓴다. 떼어 둔 동안 여기서 여는 파일은 그 창에 열린다. */
+let popWin = null;
+const popAlive = () => !POP && popWin && !popWin.closed;
+function popOut() {
+  if (st.sel == null) return;
+  if (fs.file) ls('ws.file.' + st.sel, fs.file);
+  popWin = window.open('/workspace.html#w=' + st.sel + '&pop=1', 'da-ws-pop-' + st.sel, 'popup,width=1180,height=920');
+  if (!popWin) { toast('새 창이 차단되었습니다. 브라우저의 팝업 허용을 확인하세요.', 'warn'); return; }
+  toggleFiles(false);
+}
 function resetFiles() {
-  fs.dirs = new Map(); fs.expanded = new Set(['']); fs.data = null; fs.diff = null; fs.err = null;
+  fs.dirs = new Map(); fs.expanded = new Set(['']); fs.data = null; fs.diff = null; fs.err = null; fs.turn = null; fs.tdiff = null;
   fs.file = st.sel != null ? ls('ws.file.' + st.sel) : null;
-  if (fs.open && st.sel != null) { loadDir(''); if (fs.file) openFile(fs.file); else { renderTree(); renderView(); } }
+  applySplit();
+  if (fs.open && st.sel != null) { loadDir(''); if (fs.file) openFile(fs.file); else { tree.open = true; applyTree(); renderTree(); renderView(); } }
 }
 async function loadDir(dir) {
   const ws = st.sel; if (ws == null) return;
@@ -728,11 +874,18 @@ function toggleDir(path) {
   renderTree();
 }
 /** 파일 열기. 패널이 닫혀 있으면 열고, 트리에서 그 파일까지의 폴더를 펼친다. */
-function openFile(path, mode) {
-  fs.file = path; fs.data = null; fs.diff = null; fs.err = null;
-  fs.mode = mode || (isMd(path) ? (ls('ws.mdmode') || 'preview') : 'source');
-  if (st.sel != null) ls('ws.file.' + st.sel, path);
-  if (!fs.open) { toggleFiles(true); }
+function openFile(path, mode, turn) {
+  if (st.sel != null) {
+    ls('ws.file.' + st.sel, path);
+    try { const k = 'ws.recent.' + st.sel, r = JSON.parse(ls(k) || '[]').filter(x => x !== path); r.unshift(path); ls(k, JSON.stringify(r.slice(0, 12))); } catch (_) {}
+  }
+  // 파일 보기를 별도 창으로 떼어 두었으면 그 창에 연다(이 창의 패널은 열지 않는다)
+  if (popAlive()) { ls('ws.popopen', JSON.stringify({ ws: st.sel, path, mode: mode || null, turn: turn || null, at: Date.now() })); return; }
+  fs.file = path; fs.data = null; fs.diff = null; fs.err = null; fs.turn = turn || null; fs.tdiff = null;
+  fs.mode = fs.turn ? 'turn' : mode || (isMd(path) ? (ls('ws.mdmode') || 'preview') : 'source');
+  if (!tree.pin) tree.open = false;
+  if (!fs.open) { toggleFiles(true); } else applyTree();
+  if (fs.turn) loadTurnDiff();
   const ps = path.split('/'); for (let i = 1; i < ps.length; i++) { const d = ps.slice(0, i).join('/'); if (!fs.expanded.has(d)) { fs.expanded.add(d); if (!fs.dirs.has(d)) loadDir(d); } }
   renderTree(); renderView(); loadFile(true);
 }
@@ -752,9 +905,17 @@ async function loadDiff() {
   if (ws !== st.sel || path !== fs.file) return;
   fs.diff = d; renderView();
 }
+async function loadTurnDiff() {
+  const ws = st.sel, path = fs.file, turn = fs.turn; if (ws == null || !path || !turn) return;
+  let d; try { d = await getJ(`/api/workspaces/turns/${turn}/diff?path=${encodeURIComponent(path)}`); } catch (_) { d = { error: '조회 실패' }; }
+  if (ws !== st.sel || path !== fs.file || turn !== fs.turn) return;
+  fs.tdiff = d; renderView();
+}
 function setMode(m) {
-  fs.mode = m; if (isMd(fs.file) && m !== 'diff') ls('ws.mdmode', m);
-  if (m === 'diff') { fs.diff = null; renderView(); loadDiff(); } else renderView();
+  fs.mode = m; if (isMd(fs.file) && (m === 'preview' || m === 'source')) ls('ws.mdmode', m);
+  if (m === 'diff') { fs.diff = null; renderView(); loadDiff(); }
+  else if (m === 'turn') { renderView(); if (!fs.tdiff) loadTurnDiff(); }
+  else renderView();
 }
 async function reloadFiles() {
   if (st.sel == null) return;
@@ -764,15 +925,17 @@ async function reloadFiles() {
 function renderView() {
   if (!fs.open) return;
   const v = $('fview'), p = fs.file, d = fs.data;
-  if (!p) { $('fPath').textContent = ''; $('fModes').innerHTML = ''; UI.set(v, '<div class="fempty"><div>왼쪽에서 파일을 고르세요.<br>답변 아래의 「바뀐 파일」을 눌러도 여기에 열립니다.</div></div>'); return; }
+  if (!p) { $('fPath').textContent = ''; $('fModes').innerHTML = ''; $('fModes').style.display = 'none'; UI.set(v, '<div class="fempty" style="padding-left:min(340px, 50%)"><div>폴더 트리에서 파일을 고르거나 <b>Ctrl+P</b> 로 이름을 찾으세요.<br>답변 아래의 「바뀐 파일」을 눌러도 여기에 열립니다.</div></div>'); return; }
   const cut = p.lastIndexOf('/') + 1;
   UI.set($('fPath'), `${esc(p.slice(0, cut))}<b>${esc(p.slice(cut))}</b>`); $('fPath').title = p + (d ? `\n${(d.size / 1024).toFixed(1)} KB · ${fmt(d.mtime)} 수정` : '');
-  const text = d && d.text != null, modes = text ? (isMd(p) ? [['preview', '미리보기'], ['source', '원문'], ['diff', '변경분']] : [['source', '원문'], ['diff', '변경분']]) : [];
-  if (text && !modes.some(m => m[0] === fs.mode)) fs.mode = modes[0][0];
-  UI.set($('fModes'), modes.map(m => `<button class="tab${m[0] === fs.mode ? ' sel' : ''}" data-mode="${m[0]}"${m[0] === 'diff' ? ' title="마지막 커밋과 비교(git 저장소일 때)"' : ''}>${m[1]}</button>`).join(''));
+  const text = d && d.text != null, modes = (fs.turn ? [['turn', '이 요청의 변경']] : []).concat(text ? (isMd(p) ? [['preview', '미리보기'], ['source', '원문'], ['diff', '변경분']] : [['source', '원문'], ['diff', '변경분']]) : []);
+  if ((text || fs.err) && modes.length && !modes.some(m => m[0] === fs.mode)) fs.mode = modes[0][0];
+  const tip = { diff: '마지막 커밋과 비교(git 저장소일 때)', turn: '이 요청이 이 파일을 바꾼 내용(요청 전 → 요청 후)' };
+  UI.set($('fModes'), modes.map(m => `<button class="tab${m[0] === fs.mode ? ' sel' : ''}" data-mode="${m[0]}"${tip[m[0]] ? ` title="${tip[m[0]]}"` : ''}>${m[1]}</button>`).join(''));
   $('fModes').style.display = modes.length ? '' : 'none';
   let h;
-  if (fs.err) h = `<div class="fempty"><div>${esc(fs.err)}</div></div>`;
+  if (fs.mode === 'turn' && fs.turn) h = turnDiffHtml(fs.tdiff);          // 지워진 파일도 이 요청의 변경은 볼 수 있다
+  else if (fs.err) h = `<div class="fempty"><div>${esc(fs.err)}</div></div>`;
   else if (!d) h = '<div class="fempty"><div>불러오는 중…</div></div>';
   else if (d.image) h = `<div class="fimg"><img src="${rawUrl(p, d.mtime)}" alt="${esc(d.name)}"></div>`;
   else if (d.tooBig) h = `<div class="fempty"><div>파일이 커서(${(d.size / 1048576).toFixed(1)} MB) 여기서는 열지 않습니다.</div></div>`;
@@ -784,6 +947,11 @@ function renderView() {
     h = `<div class="fsrc"><pre class="ln">${ln}</pre><pre class="cd">${esc(d.text)}</pre></div>`;
   }
   UI.set(v, h);
+}
+function turnDiffHtml(d) {
+  if (d && !d.error && (!d.diff || !d.diff.trim())) return '<div class="fempty"><div>내용은 그대로입니다(수정 시각만 바뀌었거나 글이 아닌 파일).</div></div>';
+  const kind = d && d.kind === 'A' ? '이 요청에서 새로 만든 파일입니다.' : d && d.kind === 'D' ? '이 요청에서 지운 파일입니다.' : '';
+  return (kind ? `<div class="fdiff" style="padding-bottom:0"><div class="m">${kind}</div></div>` : '') + diffHtml(d);
 }
 function diffHtml(d) {
   if (!d) return '<div class="fempty"><div>불러오는 중…</div></div>';
@@ -869,11 +1037,181 @@ $('ftree').addEventListener('click', e => {
   if (r.dataset.dir != null) toggleDir(r.dataset.dir); else if (r.dataset.file != null) openFile(r.dataset.file);
 });
 $('fModes').addEventListener('click', e => { const b = e.target instanceof Element ? e.target.closest('[data-mode]') : null; if (b) setMode(b.dataset.mode); });
-const openClick = e => { const a = e.target instanceof Element ? e.target.closest('[data-open]') : null; if (a) { e.preventDefault(); openFile(a.dataset.open); } };
+const openClick = e => {
+  const t = e.target instanceof Element ? e.target : null; if (!t) return;
+  const rv = t.closest('[data-revert]'); if (rv) { revertTurn(Number(rv.dataset.revert)); return; }
+  const a = t.closest('[data-open]'); if (a) { e.preventDefault(); openFile(a.dataset.open, null, Number(a.dataset.turn) || null); }
+};
 $('wchat').addEventListener('click', openClick); $('fview').addEventListener('click', openClick);
-document.addEventListener('keydown', e => { if (e.altKey && !e.ctrlKey && !e.metaKey && e.key.toLowerCase() === 'p') { e.preventDefault(); toggleFiles(); } });
-if (ls('ws.tree') === '0') $('wfiles').classList.add('notree');
-{ const pref = ls('ws.files'); fs.open = pref == null ? window.innerWidth >= 1500 : pref === '1'; $('main').classList.toggle('files', fs.open); }
+$('fview').addEventListener('mousedown', () => { if (tree.open && !tree.pin && fs.file) { tree.open = false; applyTree(); } });   // 겹쳐 뜬 트리는 바깥(파일)을 누르면 닫힌다
+
+// ---------------------------------------------------------------- 대화 | 파일 경계 끌기(비율을 작업 공간마다 기억, 더블클릭 = 기본)
+function applySplit() {
+  const v = (st.sel != null && ls('ws.split.' + st.sel)) || ls('ws.split'), m = $('main');
+  if (v && Number(v) > 0) m.style.setProperty('--chat-w', Number(v) + '%'); else m.style.removeProperty('--chat-w');
+}
+{
+  const h = $('wsplit'), m = $('main');
+  h.addEventListener('pointerdown', e => {
+    if (e.button !== 0) return;
+    e.preventDefault(); h.setPointerCapture(e.pointerId); h.classList.add('drag'); document.body.classList.add('resizing');
+    const r = m.getBoundingClientRect(); let pct = 0;
+    const move = ev => { pct = Math.max(12, Math.min(88, (ev.clientX - r.left) / r.width * 100)); m.style.setProperty('--chat-w', pct.toFixed(1) + '%'); };
+    const up = () => {
+      h.removeEventListener('pointermove', move); h.removeEventListener('pointerup', up); h.removeEventListener('pointercancel', up);
+      h.classList.remove('drag'); document.body.classList.remove('resizing');
+      if (pct) { ls('ws.split', pct.toFixed(1)); if (st.sel != null) ls('ws.split.' + st.sel, pct.toFixed(1)); }
+    };
+    h.addEventListener('pointermove', move); h.addEventListener('pointerup', up); h.addEventListener('pointercancel', up);
+  });
+  h.addEventListener('dblclick', () => { ls('ws.split', null); if (st.sel != null) ls('ws.split.' + st.sel, null); applySplit(); });
+  // 본문이 좁으면(창이 작거나 목록을 펴 둔 경우) 파일을 열 때 대화를 접는다 — 화면 폭이 아니라 본문 폭 기준
+  new ResizeObserver(() => m.classList.toggle('narrow', m.clientWidth < 760)).observe(m);
+}
+
+// ---------------------------------------------------------------- 파일 찾기(Ctrl+P): 폴더 전체의 파일 이름을 한 번 받아 두고 화면에서 거른다
+// mention = 입력칸에서 @ 로 연 경우({pos}): 고르면 그 @ 자리에 경로를 넣는다.
+const qo = { ws: null, files: null, more: false, at: 0, shown: [], cur: 0, mention: null };
+async function qoLoad(force) {
+  const ws = st.sel; if (ws == null) return;
+  if (!force && qo.ws === ws && qo.files && Date.now() - qo.at < 30000) return;
+  if (qo.ws !== ws) { qo.files = null; qo.ws = ws; }
+  let d; try { d = await getJ(`/api/workspaces/${ws}/names`); } catch (_) { d = { error: 1 }; }
+  if (ws !== st.sel) return;
+  if (!d.error) { qo.files = d.files || []; qo.more = !!d.more; qo.at = Date.now(); }
+  else if (!qo.files) qo.files = [];
+  if (!$('qo').hidden) qoRender();
+}
+function openQo(mention) {
+  if (st.sel == null || document.querySelector('dialog[open]')) return;
+  qo.mention = mention || null; qo.cur = 0;
+  $('qIn').value = ''; $('qIn').placeholder = mention ? '요청에 넣을 파일 이름…' : '파일 이름으로 찾기…';
+  $('qEnter').textContent = mention ? '경로 넣기' : '열기'; $('qShift').style.display = mention ? 'none' : '';
+  $('qo').hidden = false; qoRender(); $('qIn').focus(); qoLoad(false);
+}
+function closeQo() { if ($('qo').hidden) return; $('qo').hidden = true; if (qo.mention && !POP) $('wIn').focus(); qo.mention = null; }
+/** 이름 맞추기 점수(클수록 앞). 파일 이름에 그대로 있으면 가장 앞, 경로에 있으면 다음, 글자가 순서대로만 있어도 맞는 것으로 본다. 안 맞으면 -1. */
+function qoScore(path, q) {
+  const p = path.toLowerCase(), name = p.slice(p.lastIndexOf('/') + 1);
+  let i = name.indexOf(q); if (i >= 0) return 1000 - i * 3 - name.length * .2 + (i === 0 ? 150 : 0) - p.length * .02;
+  i = p.indexOf(q); if (i >= 0) return 500 - p.length * .1;
+  let k = 0, gaps = 0, last = -1;
+  for (let j = 0; j < p.length && k < q.length; j++) if (p[j] === q[k]) { if (last >= 0) gaps += j - last - 1; last = j; k++; }
+  return k === q.length ? 200 - gaps - p.length * .05 : -1;
+}
+function qoRender() {
+  const q = $('qIn').value.toLowerCase().replace(/\s+/g, ''), files = qo.files;
+  let list;
+  if (!files) { UI.set($('qList'), '<div class="qnone">파일 목록을 읽는 중…</div>'); $('qCount').textContent = ''; qo.shown = []; return; }
+  if (!q) {
+    // 찾는 말이 없으면: 최근에 연 파일 → 이 대화에서 바뀐 파일 → 앞쪽 파일
+    const have = new Set(files), seen = new Set(); list = [];
+    let recent = []; try { recent = JSON.parse(ls('ws.recent.' + st.sel) || '[]'); } catch (_) {}
+    const ch = changedMap();
+    for (const p of recent.concat([...ch.keys()].filter(p => ch.get(p) !== 'D'))) if (have.has(p) && !seen.has(p)) { seen.add(p); list.push(p); }
+    for (const p of files) { if (list.length >= 40) break; if (!seen.has(p)) list.push(p); }
+  } else {
+    list = files.map(p => [qoScore(p, q), p]).filter(x => x[0] >= 0).sort((a, b) => b[0] - a[0] || a[1].length - b[1].length).slice(0, 60).map(x => x[1]);
+  }
+  qo.shown = list; if (qo.cur >= list.length) qo.cur = Math.max(0, list.length - 1);
+  const ch = changedMap();
+  UI.set($('qList'), list.length ? list.map((p, i) => { const c = p.lastIndexOf('/') + 1, k = ch.get(p);
+    return `<div class="qr${i === qo.cur ? ' sel' : ''}" data-i="${i}"><b>${esc(p.slice(c))}</b><span>${esc(p.slice(0, Math.max(0, c - 1)))}</span>${k ? `<i>${k === 'A' ? '새 파일' : '수정됨'}</i>` : ''}</div>`; }).join('')
+    : `<div class="qnone">${files.length ? '맞는 파일이 없습니다.' : '파일이 없습니다.'}</div>`);
+  $('qCount').textContent = files.length ? `파일 ${files.length.toLocaleString()}개${qo.more ? '+ (많아서 일부만)' : ''}` : '';
+  const s = $('qList').querySelector('.qr.sel'); if (s) s.scrollIntoView({ block: 'nearest' });
+}
+function qoPick(i, insert) {
+  const p = qo.shown[i]; if (!p) return;
+  const m = qo.mention; closeQo();
+  if (m || insert) insertPath(p, m); else openFile(p);
+}
+/** 입력칸에 파일 경로를 넣는다(@ 로 열었으면 그 @ 를 바꾼다). 세션은 작업 폴더 기준 상대 경로를 그대로 읽는다. */
+function insertPath(path, m) {
+  if (POP) { ls('ws.quote', JSON.stringify({ ws: st.sel, text: '`' + path + '` ', inline: true, at: Date.now() })); toast('대화 창의 입력칸에 넣었습니다.', 'ok'); return; }
+  const inp = $('wIn'), v = inp.value, ins = '`' + path + '` ';
+  let a = inp.selectionStart, b = inp.selectionEnd;
+  if (m && v[m.pos] === '@') { a = m.pos; b = m.pos + 1; }
+  inp.value = v.slice(0, a) + ins + v.slice(b); grow(); showChat(); inp.focus(); inp.setSelectionRange(a + ins.length, a + ins.length);
+}
+/** 입력칸이 보이게 한다(파일만 크게 보던 중이면 대화를 다시 편다). */
+function showChat() { const m = $('main'); if (m.classList.contains('fmax')) toggleMax(false); if (m.classList.contains('narrow') && fs.open) toggleFiles(false); }
+$('qIn').addEventListener('input', () => { qo.cur = 0; qoRender(); });
+$('qIn').addEventListener('keydown', e => {
+  if (e.isComposing) return;
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); const n = qo.shown.length; if (n) { qo.cur = (qo.cur + (e.key === 'ArrowDown' ? 1 : n - 1)) % n; qoRender(); } }
+  else if (e.key === 'Enter') { e.preventDefault(); qoPick(qo.cur, e.shiftKey); }
+  else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeQo(); }
+});
+$('qList').addEventListener('click', e => { const r = e.target instanceof Element ? e.target.closest('.qr') : null; if (r) qoPick(Number(r.dataset.i), e.shiftKey); });
+$('qo').addEventListener('mousedown', e => { if (e.target === $('qo')) closeQo(); });
+// 입력칸에서 낱말 첫 글자로 @ 를 치면 파일 찾기가 열린다(Esc 로 닫으면 @ 는 그대로 남는다)
+$('wIn').addEventListener('input', e => {
+  if (e.data !== '@' || e.isComposing || st.sel == null) return;
+  const inp = $('wIn'), pos = inp.selectionStart - 1;
+  if (pos >= 0 && inp.value[pos] === '@' && (pos === 0 || /\s/.test(inp.value[pos - 1]))) openQo({ pos });
+});
+
+// ---------------------------------------------------------------- 긁은 부분으로 질문: 파일·답변에서 글을 긁으면 버튼이 뜨고, 누르면 인용(경로·줄 번호)이 입력칸에 들어간다
+const pick = { text: '', path: null, lines: null };
+function selCheck() {
+  const s = window.getSelection(), b = $('selAsk');
+  if (!s || s.isCollapsed || !s.rangeCount) { b.hidden = true; return; }
+  const r = s.getRangeAt(0), n = r.commonAncestorContainer, el = n.nodeType === 1 ? n : n.parentElement;
+  const inFile = el && el.closest('#fview'), inAns = el && el.closest('.wa .md');
+  const text = s.toString().replace(/\r/g, '').replace(/^\n+|\s+$/g, '');
+  if ((!inFile && !inAns) || text.trim().length < 2) { b.hidden = true; return; }
+  pick.text = text; pick.path = inFile ? fs.file : null; pick.lines = null;
+  const cd = inFile && fs.mode === 'source' ? $('fview').querySelector('pre.cd') : null;
+  if (cd && cd.contains(r.startContainer)) {            // 원문 보기: 줄 번호를 함께 싣는다
+    const pre = document.createRange(); pre.selectNodeContents(cd); pre.setEnd(r.startContainer, r.startOffset);
+    const head = pre.toString(), lead = s.toString().length - s.toString().replace(/^\n+/, '').length;
+    const a = head.split('\n').length + lead; pick.lines = [a, a + text.split('\n').length - 1];
+  }
+  const rc = r.getBoundingClientRect(); b.hidden = false;
+  b.style.left = Math.max(8, Math.min(rc.right - 60, window.innerWidth - b.offsetWidth - 12)) + 'px';
+  b.style.top = (rc.bottom + 8 + b.offsetHeight > window.innerHeight ? Math.max(8, rc.top - b.offsetHeight - 8) : rc.bottom + 8) + 'px';
+}
+function quotePick() {
+  let t = pick.text; if (t.length > 3000) t = t.slice(0, 3000) + '\n…(이하 생략)';
+  const L = pick.lines, head = pick.path ? '`' + pick.path + '`' + (L ? (L[0] === L[1] ? ` ${L[0]}줄` : ` ${L[0]}–${L[1]}줄`) : '') + ' 의 이 부분:' : '위 답변의 이 부분:';
+  const q = head + '\n' + t.split('\n').map(l => '> ' + l).join('\n') + '\n\n';
+  window.getSelection().removeAllRanges(); $('selAsk').hidden = true;
+  if (POP) { ls('ws.quote', JSON.stringify({ ws: st.sel, text: q, at: Date.now() })); toast('대화 창의 입력칸에 넣었습니다.', 'ok'); return; }
+  addQuote(q);
+}
+function addQuote(q, inline) {
+  const inp = $('wIn');
+  inp.value = inline ? inp.value + q : (inp.value.trim() ? inp.value.replace(/\s+$/, '') + '\n\n' : '') + q;
+  grow(); showChat(); inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); inp.scrollTop = inp.scrollHeight;
+}
+document.addEventListener('mouseup', e => { if (e.target !== $('selAsk')) setTimeout(selCheck, 0); });
+document.addEventListener('keyup', e => { if (e.shiftKey || e.key === 'Shift') selCheck(); });
+$('selAsk').addEventListener('mousedown', e => e.preventDefault());      // 누르는 동안 긁어 둔 것이 풀리지 않게
+$('selAsk').addEventListener('click', quotePick);
+for (const id of ['wchat', 'fview']) $(id).addEventListener('scroll', () => { $('selAsk').hidden = true; }, { passive: true });
+
+// ---------------------------------------------------------------- 창 사이 신호(localStorage): 떼어 낸 파일 창 ↔ 대화 창
+window.addEventListener('storage', e => {
+  if (!e.newValue) return;
+  let d; try { d = JSON.parse(e.newValue); } catch (_) { return; }
+  if (e.key === 'ws.popopen' && POP && d.ws === st.sel) openFile(d.path, d.mode, d.turn);          // 대화 창에서 연 파일
+  else if (e.key === 'ws.quote' && !POP && d.ws === st.sel && !UI.asleep()) { ls('ws.quote', null); addQuote(d.text, d.inline); }   // 파일 창에서 긁은 인용
+});
+
+// ---------------------------------------------------------------- 단축키: Alt+B 작업 목록 · Alt+P 파일 패널 · Alt+Shift+P 파일만 크게 · Ctrl+P 파일 찾기 · Esc 겹쳐 뜬 것 닫기
+document.addEventListener('keydown', e => {
+  const k = e.key.toLowerCase();
+  if (e.altKey && !e.ctrlKey && !e.metaKey && k === 'p') { e.preventDefault(); if (e.shiftKey) { if (!fs.open) toggleFiles(true); toggleMax(); } else if (!POP) toggleFiles(); }
+  else if (e.altKey && !e.ctrlKey && !e.metaKey && k === 'b' && !POP) { e.preventDefault(); toggleSide(); }
+  else if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && k === 'p' && st.sel != null) { e.preventDefault(); if ($('qo').hidden) openQo(); else closeQo(); }
+  else if (e.key === 'Escape') {
+    if (!$('qo').hidden) closeQo(); else if (side.pop) sidePop(false);
+    else if (tree.open && !tree.pin && fs.file) { tree.open = false; applyTree(); }
+    $('selAsk').hidden = true;
+  }
+});
+{ const pref = ls('ws.files'); fs.open = POP || (pref == null ? window.innerWidth >= 1500 : pref === '1'); $('main').classList.toggle('files', fs.open); $('btnFiles').classList.toggle('on', fs.open); applyTree(); applySide(); }
 // 열어 둔 파일은 3초마다 수정 시각만 확인해 바뀌었으면 다시 읽고, 작업 중에는 펼친 폴더도 6초마다 다시 읽는다(가려진 탭은 쉰다)
 setInterval(() => {
   if (UI.asleep() || !fs.open || st.sel == null) return;

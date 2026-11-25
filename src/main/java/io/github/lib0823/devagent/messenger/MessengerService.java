@@ -97,6 +97,7 @@ public class MessengerService {
     public static final String NOTICE_MENTION = "mention";
     public static final String NOTICE_ISSUE = "issue";
     public static final String NOTICE_RESEARCH = "research";
+    public static final String NOTICE_WORKSPACE = "workspace";
     public static final String NOTICE_SYSTEM = "system";
 
     /**
@@ -112,6 +113,7 @@ public class MessengerService {
         m.put(NOTICE_MENTION, "멘션 초안");
         m.put(NOTICE_ISSUE, "이슈 에이전트");
         m.put(NOTICE_RESEARCH, "리서치");
+        m.put(NOTICE_WORKSPACE, "작업 공간");
         m.put(NOTICE_SYSTEM, "시스템(시작·오류)");
         return m;
     }

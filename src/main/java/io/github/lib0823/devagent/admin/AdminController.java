@@ -226,6 +226,7 @@ public class AdminController {
             MessengerService.NOTICE_MENTION, "나를 부른 메시지의 답변 초안. 꺼도 초안은 「멘션 처리」에 남습니다(방에 직접 답은 그대로).",
             MessengerService.NOTICE_ISSUE, "설계·리뷰 확인 요청, 진행·완료·한도 안내. 끄면 확인은 에이전트 화면과 알림함에서 합니다.",
             MessengerService.NOTICE_RESEARCH, "메신저로 접수한 질문(@AI 질문 …)의 완료 알림. 결과는 리서치 탭에 있습니다.",
+            MessengerService.NOTICE_WORKSPACE, "메신저로 보낸 작업 공간 요청(@AI 작업 …)의 결과와 실행 전 확인 요청. 결과는 작업 공간 탭에도 있습니다.",
             MessengerService.NOTICE_SYSTEM, "플랫폼 시작됨 · 오류 알림.");
 
     /** 플랫폼이 자기방으로 보내는 알림의 유형별 켜짐 상태(메신저 탭 "메신저 알림" 카드). */
